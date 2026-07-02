@@ -1,0 +1,75 @@
+name: aquagas_rider
+description: AquaGas Rider App - Gas delivery platform for Kenya
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State Management
+  flutter_riverpod: ^2.4.9
+  riverpod_annotation: ^2.3.3
+
+  # Networking
+  dio: ^5.4.0
+  socket_io_client: ^2.0.3+1
+
+  # Maps & Location
+  google_maps_flutter: ^2.5.3
+  geolocator: ^11.0.0
+  geocoding: ^3.0.0
+
+  # Background Services
+  flutter_background_service: ^5.0.5
+  flutter_background_service_android: ^6.2.2
+  package_info_plus: ^8.0.0
+
+  # Firebase
+  firebase_core: ^3.13.0
+  firebase_messaging: ^15.2.5
+
+  # Local Storage
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+  flutter_secure_storage: ^9.0.0
+
+  # Notifications
+  flutter_local_notifications: ^17.0.0
+
+  # Permissions
+  permission_handler: ^11.3.0
+
+  # Network
+  connectivity_plus: ^6.0.1
+
+  # UI
+  cached_network_image: ^3.3.1
+  shimmer: ^3.0.0
+  lottie: ^3.1.0
+  fl_chart: ^0.67.0
+  intl: ^0.19.0
+
+  # Utils
+  uuid: ^4.3.3
+  logger: ^2.1.0
+  url_launcher: ^6.3.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^3.0.0
+  riverpod_generator: ^2.3.9
+  build_runner: ^2.4.7
+  hive_generator: ^2.0.1
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/icons/
+    - assets/animations/
