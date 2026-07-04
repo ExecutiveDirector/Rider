@@ -2,6 +2,8 @@
 
 import 'package:flutter/material.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/constants/api_constants.dart';
+import '../../../core/services/api_service.dart';
 
 class ChangePasswordScreen extends StatefulWidget {
   const ChangePasswordScreen({super.key});
@@ -41,18 +43,16 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     });
 
     try {
-      // TODO:
-      // Call API here
-      //
-      // await RiderRepository.changePassword(
-      //   currentPassword:
-      //      _currentPasswordController.text.trim(),
-      //   newPassword:
-      //      _newPasswordController.text.trim(),
-      // );
-
-      await Future.delayed(
-        const Duration(seconds: 2),
+      // FIX: this used to just await a fake 2-second delay and show a
+      // canned "success" message no matter what the rider typed — the
+      // current password was never checked and nothing was ever saved.
+      // Matches PUT /riders/change-password (riderController.changeRiderPassword).
+      await ApiService.instance.put(
+        ApiConstants.changePassword,
+        data: {
+          'currentPassword': _currentPasswordController.text,
+          'newPassword': _newPasswordController.text,
+        },
       );
 
       if (!mounted) return;
@@ -67,9 +67,7 @@ class _ChangePasswordScreenState extends State<ChangePasswordScreen> {
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            e.toString(),
-          ),
+          content: Text(dioErrorMessage(e)),
         ),
       );
     } finally {

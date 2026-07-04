@@ -59,13 +59,20 @@ class _NotificationsNotifier extends StateNotifier<List<AppNotification>> {
       final list = response.data['data'] as List? ?? [];
       final fetched = list.map((j) {
         return AppNotification(
-          id: j['id']?.toString() ?? '',
+          // FIX: backend returns snake_case (notification_id,
+          // notification_type, created_at) — this only ever checked the
+          // camelCase names, so every notification fetched from the API
+          // (as opposed to ones that arrived live over FCM) had a blank
+          // id, always showed as type 'general', and always showed "just
+          // now" instead of its real timestamp.
+          id: (j['notification_id'] ?? j['id'])?.toString() ?? '',
           title: j['title'] ?? '',
           body: j['message'] ?? j['body'] ?? '',
-          type: j['type'] ?? 'general',
-          receivedAt:
-              DateTime.tryParse(j['createdAt'] ?? '') ?? DateTime.now(),
-          isRead: j['isRead'] ?? j['is_read'] ?? false,
+          type: j['notification_type'] ?? j['type'] ?? 'general',
+          receivedAt: DateTime.tryParse(
+                  j['created_at'] ?? j['createdAt'] ?? '') ??
+              DateTime.now(),
+          isRead: j['is_read'] == 1 || j['is_read'] == true || j['isRead'] == true,
         );
       }).toList();
       // Merge: API results go after any locally-received FCM ones

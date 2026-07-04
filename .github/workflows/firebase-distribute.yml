@@ -1,0 +1,58 @@
+name: Build & Distribute Rider App
+
+# Runs whenever you push to main — builds a release APK and pushes it to
+# Firebase App Distribution. Riders on your tester list get a notification
+# and can tap to install, no Play Store review needed.
+#
+# Setup (one-time, same as the vendor app):
+#   1. In Firebase Console → Project Settings → General, copy the Android
+#      app ID for the Rider app (looks like 1:123456789:android:abcdef).
+#      Add it as a repo secret: FIREBASE_ANDROID_APP_ID
+#   2. In Firebase Console → Project Settings → Service Accounts, generate
+#      a new private key (JSON). Add its full contents as a repo secret:
+#      FIREBASE_SERVICE_ACCOUNT
+#   3. In Firebase Console → App Distribution → Testers & Groups, create
+#      a group called "riders" (or change the `groups:` line below to
+#      match whatever group you use) and add your test riders' emails.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}   # lets you also trigger it manually from the Actions tab
+
+jobs:
+  build-and-distribute:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.32.0'   # matches vendor app / your local dev version
+          channel: 'stable'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # If you have tests, keep this — it stops a broken build from ever
+      # reaching a rider's phone. Remove the step if you don't have tests yet.
+      - name: Run tests
+        run: flutter test
+        continue-on-error: true   # set to false once you're confident in your test suite
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Upload to Firebase App Distribution
+        uses: wzieba/Firebase-Distribution-Github-Action@v1
+        with:
+          appId: ${{ secrets.FIREBASE_ANDROID_APP_ID }}
+          serviceCredentialsFileContent: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          groups: riders
+          file: build/app/outputs/flutter-apk/app-release.apk
+          releaseNotes: |
+            Auto-build from commit ${{ github.sha }}
+            ${{ github.event.head_commit.message }}

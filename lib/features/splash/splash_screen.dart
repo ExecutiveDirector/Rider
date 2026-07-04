@@ -1,4 +1,5 @@
 // lib/features/splash/splash_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
@@ -7,6 +8,7 @@ import '../../core/services/api_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/notification_watcher_service.dart';
 import '../../data/repositories/auth_repository.dart';
 import '../../data/providers/auth_provider.dart';
 
@@ -75,6 +77,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         } catch (e) {
           debugPrint('[Splash] Push token registration failed (non-fatal): $e');
         }
+        unawaited(NotificationWatcherService.instance.start());
       }
     } else {
       if (mounted) Navigator.pushReplacementNamed(context, AppRoutes.login);

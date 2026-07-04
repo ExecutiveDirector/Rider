@@ -1,4 +1,5 @@
 // lib/features/auth/login_screen.dart
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
@@ -6,6 +7,7 @@ import '../../core/config/routes.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/notification_service.dart';
+import '../../core/services/notification_watcher_service.dart';
 import '../../data/providers/auth_provider.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
@@ -92,6 +94,11 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
     } catch (e) {
       debugPrint('[Login] Push token registration failed (non-fatal): $e');
     }
+
+    // Poll-based fallback for notifications that don't arrive over FCM
+    // (see NotificationWatcherService for why this matters — it's the
+    // same gap the vendor app already covers).
+    unawaited(NotificationWatcherService.instance.start());
   }
 
   // ── Validation ────────────────────────────────────────────────────────────

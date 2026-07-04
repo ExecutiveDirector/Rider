@@ -17,6 +17,7 @@ class ApiConstants {
   static const String login = '/riders/login';
   static const String refreshToken = '/auth/refresh';
   static const String logout = '/auth/logout';
+  static const String changePassword = '/riders/change-password';
   static const String forgotPassword = '/auth/forgot-password';
   static const String resetPassword = '/auth/reset-password';
 
@@ -25,6 +26,7 @@ class ApiConstants {
   static const String completedOrders = '/riders/orders/completed';
   static const String ordersBase = '/riders/orders'; // + /:id[/verb]
   static const String pushTokenRegister = '/riders/push-token/register';
+  static const String pushTokenUnregister = '/riders/push-token/unregister';
 
   // Tracking
   static const String updateLocation = '/riders/location';

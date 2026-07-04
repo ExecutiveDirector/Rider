@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
 import '../../../core/config/routes.dart';
+import '../../../core/services/order_alert_sound_service.dart';
 import '../../../core/widgets/cancel_reason_dialog.dart';
 import '../../../data/models/order_model.dart';
 import '../../../data/providers/order_provider.dart';
@@ -29,6 +30,13 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
   @override
   void initState() {
     super.initState();
+    // Rings continuously — like an incoming call — for as long as this
+    // sheet is on screen, so a new order can't be missed even if the
+    // phone is in a pocket or mounted with road noise. Stopped in
+    // dispose(), which fires on accept, reject, auto-reject timeout, and
+    // manual dismissal alike, so there's exactly one place to keep in sync.
+    OrderAlertSoundService.instance.play();
+
     _pulseCtrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -88,6 +96,7 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
   void dispose() {
     _timer?.cancel();
     _pulseCtrl.dispose();
+    OrderAlertSoundService.instance.stop();
     super.dispose();
   }
 

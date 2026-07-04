@@ -8,6 +8,8 @@ import '../../core/constants/app_colors.dart';
 import '../../core/config/routes.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/services/storage_service.dart';
+import '../../core/services/notification_service.dart';
+import '../../core/services/notification_watcher_service.dart';
 import '../../data/providers/auth_provider.dart';
 import '../../data/providers/theme_provider.dart';
 
@@ -89,8 +91,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     );
     if (confirmed != true || !mounted) return;
 
-    // FIX: disconnect socket, clear auth state, navigate to login
+    // FIX: disconnect socket, stop the notification watcher, unregister
+    // this device's push token, clear auth state, navigate to login —
+    // otherwise the watcher keeps polling under the next rider's session
+    // and a stale token stays registered against this rider's account.
     SocketService.instance.disconnect();
+    NotificationWatcherService.instance.reset();
+    await NotificationService.instance.unregisterToken();
     await ref.read(authProvider.notifier).logout();
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(

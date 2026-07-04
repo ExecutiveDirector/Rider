@@ -40,6 +40,9 @@ dependencies:
   # Notifications
   flutter_local_notifications: ^17.0.0
 
+  # Audio — looping alert tone for the incoming-order accept/reject sheet
+  audioplayers: ^6.1.0
+
   # Permissions
   permission_handler: ^11.3.0
 
@@ -73,3 +76,4 @@ flutter:
     - assets/images/
     - assets/icons/
     - assets/animations/
+    - assets/sounds/

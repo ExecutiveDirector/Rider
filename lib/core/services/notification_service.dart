@@ -139,6 +139,22 @@ class NotificationService {
     if (token != null) await _registerTokenWithBackend(token);
   }
 
+  /// Call on logout. Matches DELETE /riders/push-token/unregister
+  /// (riderController.unregisterRiderPushToken). Best-effort — if this
+  /// fails the token just goes stale on the backend, which is harmless.
+  Future<void> unregisterToken() async {
+    try {
+      final token = await _fcm.getToken();
+      if (token == null) return;
+      await ApiService.instance.delete(
+        ApiConstants.pushTokenUnregister,
+        data: {'token': token},
+      );
+    } catch (e) {
+      debugPrint('[Notifications] Failed to unregister push token: $e');
+    }
+  }
+
   void _handleForegroundMessage(RemoteMessage message) {
     final data = message.data;
     final type = data['type'] ?? 'general';

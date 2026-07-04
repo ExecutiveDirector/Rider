@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/config/routes.dart';
+import '../../core/services/socket_service.dart';
+import '../../core/services/notification_service.dart';
+import '../../core/services/notification_watcher_service.dart';
 import '../../data/providers/auth_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -239,6 +242,12 @@ class ProfileScreen extends ConsumerWidget {
                         );
 
                         if (confirm == true) {
+                          // Mirrors settings_screen.dart's logout cleanup —
+                          // this was the one logout path missing socket
+                          // disconnect / watcher reset / token unregister.
+                          SocketService.instance.disconnect();
+                          NotificationWatcherService.instance.reset();
+                          await NotificationService.instance.unregisterToken();
                           await ref.read(authProvider.notifier).logout();
 
                           if (context.mounted) {
