@@ -14,6 +14,16 @@ name: Build & Distribute Rider App
 #   3. In Firebase Console → App Distribution → Testers & Groups, create
 #      a group called "riders" (or change the `groups:` line below to
 #      match whatever group you use) and add your test riders' emails.
+#   4. Release signing — the keystore itself never touches the repo:
+#        - Base64-encode your .jks (`base64 -w0 aquagas-rider-release.jks`)
+#          and add the output as secret: RIDER_KEYSTORE_BASE64
+#        - Add three more secrets matching what you set when you ran
+#          keytool: RIDER_KEYSTORE_PASSWORD, RIDER_KEY_ALIAS,
+#          RIDER_KEY_PASSWORD
+#      The "Reconstruct signing keystore" step below decodes the secret
+#      back into a real .jks and writes key.properties right before the
+#      build — android/app/build.gradle.kts picks both up automatically
+#      (falls back to debug signing if these secrets aren't set at all).
 on:
   push:
     branches: [main]
@@ -42,6 +52,36 @@ jobs:
       - name: Run tests
         run: flutter test
         continue-on-error: true   # set to false once you're confident in your test suite
+
+      # Writes android/app/keystore/rider-release.jks and android/key.properties
+      # from secrets — neither file ever lives in the repo. If the secret
+      # isn't set yet, the script just logs that and exits early, and
+      # build.gradle.kts falls back to debug signing — so this won't break
+      # a first run before you've configured these secrets.
+      #
+      # NOTE: GitHub Actions doesn't allow the `secrets` context inside an
+      # `if:` condition (that's the "Unrecognized named-value: secrets"
+      # error) — so the presence check has to happen inside the shell
+      # script itself, via env vars, instead.
+      - name: Reconstruct signing keystore
+        env:
+          RIDER_KEYSTORE_BASE64: ${{ secrets.RIDER_KEYSTORE_BASE64 }}
+          RIDER_KEYSTORE_PASSWORD: ${{ secrets.RIDER_KEYSTORE_PASSWORD }}
+          RIDER_KEY_PASSWORD: ${{ secrets.RIDER_KEY_PASSWORD }}
+          RIDER_KEY_ALIAS: ${{ secrets.RIDER_KEY_ALIAS }}
+        run: |
+          if [ -z "$RIDER_KEYSTORE_BASE64" ]; then
+            echo "RIDER_KEYSTORE_BASE64 not set — skipping, build will fall back to debug signing."
+            exit 0
+          fi
+          mkdir -p android/app/keystore
+          echo "$RIDER_KEYSTORE_BASE64" | base64 -d > android/app/keystore/rider-release.jks
+          {
+            echo "storePassword=$RIDER_KEYSTORE_PASSWORD"
+            echo "keyPassword=$RIDER_KEY_PASSWORD"
+            echo "keyAlias=$RIDER_KEY_ALIAS"
+            echo "storeFile=app/keystore/rider-release.jks"
+          } > android/key.properties
 
       - name: Build release APK
         run: flutter build apk --release

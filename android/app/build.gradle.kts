@@ -1,3 +1,6 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -8,6 +11,28 @@ plugins {
     // Version is pulled from the classpath declared in the root
     // android/build.gradle.kts (matches vendor app's setup exactly).
     id("com.google.gms.google-services")
+}
+
+// ── Release signing ──────────────────────────────────────────────────────
+// Mirrors the vendor app's setup, with one difference: vendor commits its
+// key.properties + .jks directly into the repo (works, but means the
+// signing password sits in plaintext in git history forever). Here,
+// key.properties and the .jks are expected to be written to disk by CI
+// (see .github/workflows/firebase-distribute.yml) — reconstructed from
+// GitHub secrets right before this file is evaluated — or dropped in
+// locally by hand for local release builds. Neither file is committed;
+// both are already covered by .gitignore. If neither exists (e.g. a
+// contributor's first local checkout with no secrets configured), this
+// falls back to debug signing so `flutter build apk --release` still
+// works rather than hard-failing.
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+
+if (hasReleaseKeystore) {
+    FileInputStream(keystorePropertiesFile).use {
+        keystoreProperties.load(it)
+    }
 }
 
 android {
@@ -26,21 +51,33 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
         applicationId = "com.example.aquagasrider"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
         minSdk = flutter.minSdkVersion
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = rootProject.file(
+                    keystoreProperties["storeFile"] as String
+                )
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }

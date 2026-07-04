@@ -1,0 +1,62 @@
+# Miscellaneous
+*.class
+*.log
+*.pyc
+*.swp
+.DS_Store
+.atom/
+.buildlog/
+.history
+.svn/
+migrate_working_dir/
+
+# IntelliJ related
+*.iml
+*.ipr
+*.iws
+.idea/
+
+# The .vscode folder contains launch configuration and tasks you configure in
+# VS Code which you may wish to be included in version control, so this line
+# is commented out by default.
+#.vscode/
+
+# Flutter/Dart/Pub related
+**/doc/api/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.pub-cache/
+.pub/
+/build/
+
+# Symbolication related
+app.*.symbols
+
+# Obfuscation related
+app.*.map.json
+
+# Android Studio will place build artifacts here
+/android/app/debug
+/android/app/profile
+/android/app/release
+
+# ─────────────────────────────────────────────────────────────────────────
+# Signing — NEVER commit these. See android/app/build.gradle.kts: it reads
+# key.properties + the keystore path from it if present, falling back to
+# debug signing if not. CI reconstructs both from GitHub secrets at build
+# time (see .github/workflows/firebase-distribute.yml) — they never need
+# to touch the repo at all.
+# ─────────────────────────────────────────────────────────────────────────
+android/key.properties
+android/app/keystore/
+*.jks
+*.keystore
+
+# NOTE: google-services.json is intentionally NOT ignored — it needs to
+# be present in the repo for CI to build at all (unlike the keystore
+# below, it's just Firebase project/client identifiers, not a secret key,
+# and this matches how the vendor app already handles it).
+
+# Local build config
+android/local.properties
