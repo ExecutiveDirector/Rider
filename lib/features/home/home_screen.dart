@@ -1,8 +1,13 @@
 // lib/features/home/home_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/pulse_dot.dart';
+import '../../core/widgets/status_pill.dart';
+import '../../core/widgets/stat_tile.dart';
+import '../../core/widgets/empty_state.dart';
 import '../../core/config/routes.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/services/location_service.dart';
@@ -76,6 +81,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Scaffold(
       backgroundColor: AppColors.background,
       body: RefreshIndicator(
+        color: AppColors.primary,
         onRefresh: () async {
           await ref.read(authProvider.notifier).loadProfile();
           await ref.read(orderProvider.notifier).fetchActiveOrders();
@@ -84,104 +90,161 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         child: CustomScrollView(
           slivers: [
             SliverAppBar(
-              expandedHeight: 160,
+              expandedHeight: 176,
               pinned: true,
-              backgroundColor: AppColors.primary,
+              backgroundColor: AppColors.primaryDark,
+              systemOverlayStyle: SystemUiOverlayStyle.light,
               flexibleSpace: FlexibleSpaceBar(
                 background: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [AppColors.primary, AppColors.primaryDark],
-                    ),
-                  ),
-                  child: SafeArea(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  decoration: const BoxDecoration(gradient: AppColors.heroGradient),
+                  child: Stack(
+                    children: [
+                      Positioned(
+                        top: -40,
+                        right: -30,
+                        child: Container(
+                          width: 140,
+                          height: 140,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            gradient: RadialGradient(
+                              colors: [
+                                AppColors.accentMint.withOpacity(0.28),
+                                AppColors.accentMint.withOpacity(0),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      SafeArea(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                 children: [
-                                  // Show skeleton shimmer while profile loads
-                                  auth.isLoading || driver == null
-                                      ? _NameShimmer()
-                                      : Text(
-                                          'Hi, ${driver.name.split(' ').first} 👋',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontSize: 20,
-                                            fontWeight: FontWeight.w700,
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        // Show skeleton shimmer while profile loads
+                                        auth.isLoading || driver == null
+                                            ? _NameShimmer()
+                                            : Row(
+                                                children: [
+                                                  Flexible(
+                                                    child: Text(
+                                                      'Hi, ${driver.name.split(' ').first} 👋',
+                                                      overflow: TextOverflow.ellipsis,
+                                                      style: const TextStyle(
+                                                        color: Colors.white,
+                                                        fontSize: 20,
+                                                        fontWeight: FontWeight.w700,
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  if (driver.rating > 0) ...[
+                                                    const SizedBox(width: 8),
+                                                    Container(
+                                                      padding: const EdgeInsets.symmetric(
+                                                          horizontal: 7, vertical: 3),
+                                                      decoration: BoxDecoration(
+                                                        color: Colors.white.withOpacity(0.18),
+                                                        borderRadius: BorderRadius.circular(20),
+                                                      ),
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          const Icon(Icons.star_rounded,
+                                                              color: Color(0xFFFBBF24), size: 13),
+                                                          const SizedBox(width: 2),
+                                                          Text(
+                                                            driver.rating.toStringAsFixed(1),
+                                                            style: const TextStyle(
+                                                              color: Colors.white,
+                                                              fontSize: 11.5,
+                                                              fontWeight: FontWeight.w700,
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ],
+                                              ),
+                                        const SizedBox(height: 3),
+                                        Text(
+                                          isOnline
+                                              ? "You're online and visible to dispatch"
+                                              : "You're offline",
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            color: Colors.white.withOpacity(0.8),
+                                            fontSize: 12.5,
                                           ),
                                         ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    isOnline
-                                        ? "You're online"
-                                        : "You're offline",
-                                    style: TextStyle(
-                                      color: Colors.white.withOpacity(0.8),
-                                      fontSize: 13,
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  GestureDetector(
+                                    onTap: _onToggleOnline,
+                                    child: AnimatedContainer(
+                                      duration: const Duration(milliseconds: 300),
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 14,
+                                        vertical: 9,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        gradient: isOnline ? AppColors.brightGradient : null,
+                                        color: isOnline ? null : Colors.white.withOpacity(0.14),
+                                        borderRadius: BorderRadius.circular(24),
+                                        border: isOnline
+                                            ? null
+                                            : Border.all(color: Colors.white.withOpacity(0.3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          if (isOnline)
+                                            const PulseDot(color: Colors.white, size: 7)
+                                          else
+                                            Container(
+                                              width: 7,
+                                              height: 7,
+                                              decoration: const BoxDecoration(
+                                                color: Colors.white70,
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            isOnline ? 'Online' : 'Offline',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 13.5,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ),
                                 ],
                               ),
-                              GestureDetector(
-                                onTap: _onToggleOnline,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 300),
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                    vertical: 10,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: isOnline
-                                        ? AppColors.accent
-                                        : Colors.white.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(24),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(
-                                          color: isOnline
-                                              ? Colors.white
-                                              : Colors.white70,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        isOnline ? 'Online' : 'Offline',
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 14,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
                             ],
                           ),
-                        ],
+                        ),
                       ),
-                    ),
+                    ],
                   ),
                 ),
               ),
             ),
             SliverPadding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   if (!orderState.isLoading)
@@ -220,7 +283,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   ),
                   const SizedBox(height: 12),
                   if (!isOnline)
-                    _OfflineBanner()
+                    AppEmptyState(
+                      icon: Icons.wifi_tethering_off_rounded,
+                      title: "You're offline",
+                      message: 'Go online to start receiving orders',
+                      iconColor: AppColors.textHint,
+                      compact: true,
+                    )
                   else if (orderState.isLoading &&
                       orderState.activeOrders.isEmpty)
                     const Center(
@@ -231,13 +300,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     )
                   else if (orderState.error != null &&
                       orderState.activeOrders.isEmpty)
-                    _ErrorCard(
+                    AppEmptyState(
+                      icon: Icons.error_outline_rounded,
+                      title: 'Could not load orders',
                       message: orderState.error!,
-                      onRetry: () =>
+                      iconColor: AppColors.error,
+                      actionLabel: 'Retry',
+                      onAction: () =>
                           ref.read(orderProvider.notifier).fetchActiveOrders(),
+                      compact: true,
                     )
                   else if (orderState.activeOrders.isEmpty)
-                    _EmptyOrdersCard()
+                    AppEmptyState(
+                      icon: Icons.inventory_2_outlined,
+                      title: 'No active orders',
+                      message: 'New orders will appear here',
+                      compact: true,
+                    )
                   else
                     ...orderState.activeOrders.take(3).map((order) {
                       if (order.status == OrderStatus.pending) {
@@ -259,7 +338,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
       ),
       bottomNavigationBar: NavigationBar(
-        selectedIndex: 0,
+        selectedIndex: _navIndex,
         onDestinationSelected: (i) {
           switch (i) {
             case 1:
@@ -274,14 +353,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           }
         },
         destinations: const [
-          NavigationDestination(icon: Icon(Icons.home_outlined), label: 'Home'),
           NavigationDestination(
-              icon: Icon(Icons.local_shipping_outlined), label: 'Orders'),
+              icon: Icon(Icons.home_outlined),
+              selectedIcon: Icon(Icons.home),
+              label: 'Home'),
+          NavigationDestination(
+              icon: Icon(Icons.local_shipping_outlined),
+              selectedIcon: Icon(Icons.local_shipping),
+              label: 'Orders'),
           NavigationDestination(
               icon: Icon(Icons.account_balance_wallet_outlined),
+              selectedIcon: Icon(Icons.account_balance_wallet),
               label: 'Earnings'),
           NavigationDestination(
-              icon: Icon(Icons.person_outline), label: 'Profile'),
+              icon: Icon(Icons.person_outline),
+              selectedIcon: Icon(Icons.person),
+              label: 'Profile'),
         ],
       ),
     );
@@ -342,74 +429,29 @@ class _StatsRow extends ConsumerWidget {
     return Row(
       children: [
         Expanded(
-          child: _StatCard(
-            label: "Today's Earnings",
-            value: 'KES ${summary?.today.toStringAsFixed(0) ?? '0'}',
-            icon: Icons.account_balance_wallet_outlined,
-            color: AppColors.accent,
+          child: GestureDetector(
+            onTap: () => Navigator.pushNamed(context, AppRoutes.earnings),
+            child: StatTile(
+              label: "Today's Earnings",
+              value: 'KES ${summary?.today.toStringAsFixed(0) ?? '0'}',
+              icon: Icons.account_balance_wallet_outlined,
+              color: AppColors.accent,
+            ),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _StatCard(
-            label: 'Active Orders',
-            value: '${orderState.activeOrders.length}',
-            icon: Icons.local_shipping_outlined,
-            color: AppColors.primary,
+          child: GestureDetector(
+            onTap: () => Navigator.pushNamed(context, AppRoutes.activeOrders),
+            child: StatTile(
+              label: 'Active Orders',
+              value: '${orderState.activeOrders.length}',
+              icon: Icons.local_shipping_outlined,
+              color: AppColors.primary,
+            ),
           ),
         ),
       ],
-    );
-  }
-}
-
-class _StatCard extends StatelessWidget {
-  final String label;
-  final String value;
-  final IconData icon;
-  final Color color;
-
-  const _StatCard({
-    required this.label,
-    required this.value,
-    required this.icon,
-    required this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: color, size: 20),
-          ),
-          const SizedBox(height: 12),
-          Text(value,
-              style: const TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
-                letterSpacing: -0.5,
-              )),
-          const SizedBox(height: 2),
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 12, color: AppColors.textSecondary)),
-        ],
-      ),
     );
   }
 }
@@ -424,14 +466,16 @@ class _ActiveOrderTile extends StatelessWidget {
 
   Color _statusColor(OrderStatus s) {
     switch (s) {
+      case OrderStatus.pending:
+        return AppColors.pending;
       case OrderStatus.accepted:
-        return AppColors.primary;
+        return AppColors.accepted;
       case OrderStatus.inTransit:
-        return const Color(0xFF722ED1);
+        return AppColors.inTransit;
       case OrderStatus.delivered:
-        return AppColors.success;
-      default:
-        return AppColors.warning;
+        return AppColors.delivered;
+      case OrderStatus.cancelled:
+        return AppColors.cancelled;
     }
   }
 
@@ -479,23 +523,8 @@ class _ActiveOrderTile extends StatelessWidget {
               ),
             ),
             const SizedBox(width: 8),
-            // Status badge instead of amount
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                order.status.label,
-                style: TextStyle(
-                  color: color,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                ),
-              ),
-            ),
-            const SizedBox(width: 4),
+            StatusPill(label: order.status.label, color: color, dense: true),
+            const SizedBox(width: 2),
             const Icon(Icons.chevron_right,
                 color: AppColors.textHint, size: 20),
           ],
@@ -550,20 +579,37 @@ class _PendingOrderCardState extends ConsumerState<_PendingOrderCard> {
         color: AppColors.surface,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: AppColors.warning, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.warning.withOpacity(0.15),
+            blurRadius: 14,
+            offset: const Offset(0, 6),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             children: [
-              Container(
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: AppColors.warning.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(Icons.local_fire_department_outlined,
-                    color: AppColors.warning, size: 22),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Icon(Icons.local_fire_department_outlined,
+                        color: AppColors.warning, size: 22),
+                  ),
+                  Positioned(
+                    top: -3,
+                    right: -3,
+                    child: PulseDot(color: AppColors.warning, size: 8),
+                  ),
+                ],
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -627,103 +673,6 @@ class _PendingOrderCardState extends ConsumerState<_PendingOrderCard> {
                 ),
               ),
             ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-// ─── Empty / error / offline banners ─────────────────────────────────────────
-
-class _OfflineBanner extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.textHint.withOpacity(0.08),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: const Column(
-        children: [
-          Icon(Icons.wifi_off_rounded, size: 40, color: AppColors.textHint),
-          SizedBox(height: 12),
-          Text('You\'re offline',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.textPrimary)),
-          SizedBox(height: 4),
-          Text('Go online to start receiving orders',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-}
-
-class _EmptyOrdersCard extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(32),
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.divider),
-      ),
-      child: const Column(
-        children: [
-          Text('📦', style: TextStyle(fontSize: 44)),
-          SizedBox(height: 12),
-          Text('No active orders',
-              style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: AppColors.textPrimary)),
-          SizedBox(height: 4),
-          Text('New orders will appear here',
-              style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-        ],
-      ),
-    );
-  }
-}
-
-class _ErrorCard extends StatelessWidget {
-  final String message;
-  final VoidCallback onRetry;
-  const _ErrorCard({required this.message, required this.onRetry});
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppColors.error.withOpacity(0.06),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.error.withOpacity(0.3)),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.error_outline_rounded,
-              size: 36, color: AppColors.error),
-          const SizedBox(height: 10),
-          Text(message,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13)),
-          const SizedBox(height: 14),
-          OutlinedButton.icon(
-            onPressed: onRetry,
-            icon: const Icon(Icons.refresh, size: 16),
-            label: const Text('Retry'),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: AppColors.error,
-              side: const BorderSide(color: AppColors.error),
-            ),
           ),
         ],
       ),

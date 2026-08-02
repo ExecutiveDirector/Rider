@@ -201,7 +201,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               icon: const Icon(Icons.logout),
               label: const Text('Logout'),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.red,
+                foregroundColor: AppColors.error,
+                side: const BorderSide(color: AppColors.error),
                 minimumSize: const Size(double.infinity, 52),
               ),
               onPressed: _logout,
@@ -232,13 +233,20 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     required VoidCallback onTap,
   }) =>
       ListTile(
-        leading: Icon(icon),
+        leading: Container(
+          padding: const EdgeInsets.all(7),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, color: AppColors.primary, size: 19),
+        ),
         title: Text(title),
         subtitle: subtitle != null
             ? Text(subtitle,
                 style: const TextStyle(color: AppColors.textSecondary))
             : null,
-        trailing: const Icon(Icons.chevron_right),
+        trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
         onTap: onTap,
       );
 }

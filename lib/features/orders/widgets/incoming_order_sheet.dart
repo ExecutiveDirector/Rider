@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/constants/app_colors.dart';
+import '../../../core/widgets/gradient_button.dart';
 import '../../../core/config/routes.dart';
 import '../../../core/services/order_alert_sound_service.dart';
 import '../../../core/widgets/cancel_reason_dialog.dart';
@@ -103,179 +104,208 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
   @override
   Widget build(BuildContext context) {
     final progress = _remaining / _autoRejectSeconds;
+    final urgent = progress <= 0.4;
 
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.18),
+            blurRadius: 30,
+            offset: const Offset(0, -8),
+          ),
+        ],
       ),
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Drag handle
+          // Top accent bar — a quick "this needs you" signal before anything
+          // else even renders.
           Container(
-            width: 36,
-            height: 4,
-            margin: const EdgeInsets.only(bottom: 16),
-            decoration: BoxDecoration(
-              color: AppColors.divider,
-              borderRadius: BorderRadius.circular(2),
+            height: 5,
+            decoration: const BoxDecoration(
+              gradient: AppColors.brightGradient,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
             ),
           ),
-
-          // Header with timer
-          Row(
-            children: [
-              AnimatedBuilder(
-                animation: _pulseCtrl,
-                builder: (_, __) => Container(
-                  width: 48,
-                  height: 48,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(24, 12, 24, 32),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Drag handle
+                Container(
+                  width: 36,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 16),
                   decoration: BoxDecoration(
-                    color: AppColors.warning
-                        .withOpacity(0.1 + 0.1 * _pulseCtrl.value),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Center(
-                    child: Text('🔥', style: TextStyle(fontSize: 22)),
+                    color: AppColors.divider,
+                    borderRadius: BorderRadius.circular(2),
                   ),
                 ),
-              ),
-              const SizedBox(width: 12),
-              const Expanded(
-                child: Text(
-                  'New Order!',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ),
-              // Countdown circle
-              SizedBox(
-                width: 48,
-                height: 48,
-                child: Stack(
-                  alignment: Alignment.center,
+
+                // Header with timer
+                Row(
                   children: [
-                    CircularProgressIndicator(
-                      value: progress,
-                      backgroundColor: AppColors.divider,
-                      color:
-                          progress > 0.4 ? AppColors.warning : AppColors.error,
-                      strokeWidth: 3,
+                    AnimatedBuilder(
+                      animation: _pulseCtrl,
+                      builder: (_, __) => Container(
+                        width: 50,
+                        height: 50,
+                        decoration: BoxDecoration(
+                          gradient: AppColors.brightGradient,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppColors.primary
+                                  .withOpacity(0.25 + 0.2 * _pulseCtrl.value),
+                              blurRadius: 8 + 10 * _pulseCtrl.value,
+                              spreadRadius: 1 + 2 * _pulseCtrl.value,
+                            ),
+                          ],
+                        ),
+                        child: const Icon(Icons.local_fire_department,
+                            color: Colors.white, size: 24),
+                      ),
                     ),
-                    Text(
-                      '$_remaining',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14,
-                        color: AppColors.textPrimary,
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text(
+                        'New Order!',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    // Countdown circle
+                    SizedBox(
+                      width: 48,
+                      height: 48,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value: progress,
+                            backgroundColor: AppColors.divider,
+                            color: urgent ? AppColors.error : AppColors.warning,
+                            strokeWidth: 3.5,
+                          ),
+                          Text(
+                            '$_remaining',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 14,
+                              color: urgent
+                                  ? AppColors.error
+                                  : AppColors.textPrimary,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                   ],
                 ),
-              ),
-            ],
-          ),
 
-          const SizedBox(height: 20),
-          const Divider(),
-          const SizedBox(height: 16),
+                const SizedBox(height: 20),
+                const Divider(),
+                const SizedBox(height: 16),
 
-          // Order details
-          _InfoRow(
-            icon: Icons.person_outline,
-            label: 'Customer',
-            value: widget.order.customerName,
-          ),
-          const SizedBox(height: 10),
-          _InfoRow(
-            icon: Icons.location_on_outlined,
-            label: 'Deliver to',
-            value: widget.order.deliveryAddress,
-          ),
-          const SizedBox(height: 10),
-          _InfoRow(
-            icon: Icons.local_fire_department_outlined,
-            label: 'Gas',
-            value: '${widget.order.quantity}kg ${widget.order.gasType}',
-          ),
-          if (widget.order.distanceKm != null) ...[
-            const SizedBox(height: 10),
-            _InfoRow(
-              icon: Icons.directions_outlined,
-              label: 'Distance',
-              value: '${widget.order.distanceKm!.toStringAsFixed(1)} km',
-            ),
-          ],
-
-          const SizedBox(height: 16),
-
-          // Earnings highlight
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
-            decoration: BoxDecoration(
-              gradient: const LinearGradient(
-                colors: [AppColors.accent, Color(0xFF00A577)],
-              ),
-              borderRadius: BorderRadius.circular(14),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'You earn',
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                // Order details
+                _InfoRow(
+                  icon: Icons.person_outline,
+                  label: 'Customer',
+                  value: widget.order.customerName,
                 ),
-                Text(
-                  'KES ${widget.order.totalAmount.toStringAsFixed(0)}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w800,
-                    fontSize: 22,
-                    letterSpacing: -0.5,
+                const SizedBox(height: 10),
+                _InfoRow(
+                  icon: Icons.location_on_outlined,
+                  label: 'Deliver to',
+                  value: widget.order.deliveryAddress,
+                ),
+                const SizedBox(height: 10),
+                _InfoRow(
+                  icon: Icons.local_fire_department_outlined,
+                  label: 'Gas',
+                  value: '${widget.order.quantity}kg ${widget.order.gasType}',
+                ),
+                if (widget.order.distanceKm != null) ...[
+                  const SizedBox(height: 10),
+                  _InfoRow(
+                    icon: Icons.directions_outlined,
+                    label: 'Distance',
+                    value: '${widget.order.distanceKm!.toStringAsFixed(1)} km',
                   ),
+                ],
+
+                const SizedBox(height: 16),
+
+                // Earnings highlight
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
+                  decoration: BoxDecoration(
+                    gradient: AppColors.earnGradient,
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.accent.withOpacity(0.3),
+                        blurRadius: 14,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'You earn',
+                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      ),
+                      Text(
+                        'KES ${widget.order.totalAmount.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 22,
+                          letterSpacing: -0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                const SizedBox(height: 20),
+
+                // Action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton(
+                        onPressed: _isAccepting ? null : _onRejectPressed,
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: AppColors.error,
+                          side: const BorderSide(color: AppColors.error),
+                        ),
+                        child: const Text('Reject'),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      flex: 2,
+                      child: GradientButton(
+                        label: 'Accept Order',
+                        loading: _isAccepting,
+                        onPressed: _isAccepting ? null : _accept,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
-          ),
-
-          const SizedBox(height: 20),
-
-          // Action buttons
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: _isAccepting ? null : _onRejectPressed,
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: AppColors.error,
-                    side: const BorderSide(color: AppColors.error),
-                  ),
-                  child: const Text('Reject'),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                flex: 2,
-                child: ElevatedButton(
-                  onPressed: _isAccepting ? null : _accept,
-                  child: _isAccepting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text('Accept Order'),
-                ),
-              ),
-            ],
           ),
         ],
       ),
@@ -299,25 +329,38 @@ class _InfoRow extends StatelessWidget {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 18, color: AppColors.textSecondary),
+        Container(
+          padding: const EdgeInsets.all(6),
+          decoration: BoxDecoration(
+            color: AppColors.primary.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Icon(icon, size: 14, color: AppColors.primary),
+        ),
         const SizedBox(width: 10),
         SizedBox(
           width: 72,
-          child: Text(
-            label,
-            style: const TextStyle(
-              color: AppColors.textSecondary,
-              fontSize: 13,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              label,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontSize: 13,
+              ),
             ),
           ),
         ),
         Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(
-              color: AppColors.textPrimary,
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
+          child: Padding(
+            padding: const EdgeInsets.only(top: 4),
+            child: Text(
+              value,
+              style: const TextStyle(
+                color: AppColors.textPrimary,
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
             ),
           ),
         ),

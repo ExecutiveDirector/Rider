@@ -1,6 +1,7 @@
 // lib/features/earnings/earnings_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:fl_chart/fl_chart.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/providers/earnings_provider.dart';
 import '../../data/models/earnings_model.dart';
@@ -40,6 +41,18 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
     }
   }
 
+  // Buckets the currently-loaded earnings by weekday (Mon=0 .. Sun=6). Only
+  // meaningful while the 'week' period is selected, which is when this is
+  // shown — see the `if (_selectedPeriod == 1)` guard below.
+  List<double> _weeklyTotals(List<EarningsModel> earnings) {
+    final totals = List<double>.filled(7, 0);
+    for (final e in earnings) {
+      final idx = e.date.weekday - 1;
+      if (idx >= 0 && idx < 7) totals[idx] += e.netAmount;
+    }
+    return totals;
+  }
+
   @override
   Widget build(BuildContext context) {
     final state = ref.watch(earningsProvider);
@@ -49,6 +62,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
       backgroundColor: AppColors.background,
       appBar: AppBar(title: const Text('Earnings')),
       body: RefreshIndicator(
+        color: AppColors.primary,
         onRefresh: () async {
           await ref.read(earningsProvider.notifier).fetchSummary();
           await ref
@@ -63,54 +77,81 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                 margin: const EdgeInsets.all(20),
                 padding: const EdgeInsets.all(24),
                 decoration: BoxDecoration(
-                  gradient: const LinearGradient(
-                    colors: [AppColors.primary, AppColors.primaryDark],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  gradient: AppColors.heroGradient,
                   borderRadius: BorderRadius.circular(20),
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.3),
+                      blurRadius: 24,
+                      offset: const Offset(0, 12),
+                    ),
+                  ],
                 ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                child: Stack(
                   children: [
-                    const Text(
-                      'Total Earnings',
-                      style: TextStyle(
-                        color: Colors.white70,
-                        fontSize: 14,
+                    Positioned(
+                      top: -30,
+                      right: -20,
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              AppColors.accentMint.withOpacity(0.25),
+                              AppColors.accentMint.withOpacity(0),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'KES ${(summary?.thisMonth ?? 0).toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 36,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -1,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'This month',
-                      style: TextStyle(color: Colors.white60, fontSize: 13),
-                    ),
-                    const SizedBox(height: 20),
-                    Row(
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        _MiniStat(
-                          label: 'Today',
-                          value: 'KES ${(summary?.today ?? 0).toStringAsFixed(0)}',
+                        const Text(
+                          'Total Earnings',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 14,
+                          ),
                         ),
-                        const SizedBox(width: 24),
-                        _MiniStat(
-                          label: 'This Week',
-                          value: 'KES ${(summary?.thisWeek ?? 0).toStringAsFixed(0)}',
+                        const SizedBox(height: 6),
+                        Text(
+                          'KES ${(summary?.thisMonth ?? 0).toStringAsFixed(0)}',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 36,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: -1,
+                          ),
                         ),
-                        const SizedBox(width: 24),
-                        _MiniStat(
-                          label: 'Pending',
-                          value: 'KES ${(summary?.pendingPayout ?? 0).toStringAsFixed(0)}',
+                        const SizedBox(height: 4),
+                        const Text(
+                          'This month',
+                          style: TextStyle(color: Colors.white60, fontSize: 13),
+                        ),
+                        const SizedBox(height: 20),
+                        Row(
+                          children: [
+                            _MiniStat(
+                              label: 'Today',
+                              value:
+                                  'KES ${(summary?.today ?? 0).toStringAsFixed(0)}',
+                            ),
+                            const SizedBox(width: 24),
+                            _MiniStat(
+                              label: 'This Week',
+                              value:
+                                  'KES ${(summary?.thisWeek ?? 0).toStringAsFixed(0)}',
+                            ),
+                            const SizedBox(width: 24),
+                            _MiniStat(
+                              label: 'Pending',
+                              value:
+                                  'KES ${(summary?.pendingPayout ?? 0).toStringAsFixed(0)}',
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -153,6 +194,110 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
               ),
             ),
 
+            // Weekly earnings trend — only meaningful while viewing the
+            // 'week' period, since state.earnings holds whichever period
+            // is currently selected.
+            if (_selectedPeriod == 1) ...[
+              const SliverToBoxAdapter(child: SizedBox(height: 20)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.trending_up, size: 16, color: AppColors.primary),
+                      SizedBox(width: 6),
+                      Text(
+                        'This Week\'s Earnings',
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SliverToBoxAdapter(child: SizedBox(height: 10)),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Container(
+                    height: 160,
+                    padding: const EdgeInsets.fromLTRB(4, 16, 16, 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.divider),
+                    ),
+                    child: Builder(builder: (context) {
+                      final totals = _weeklyTotals(state.earnings);
+                      if (totals.every((v) => v == 0)) {
+                        return const Center(
+                          child: Text(
+                            'No earnings yet this week',
+                            style: TextStyle(color: AppColors.textHint),
+                          ),
+                        );
+                      }
+                      return BarChart(
+                        BarChartData(
+                          borderData: FlBorderData(show: false),
+                          gridData: const FlGridData(show: false),
+                          titlesData: FlTitlesData(
+                            leftTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false)),
+                            rightTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false)),
+                            topTitles: const AxisTitles(
+                                sideTitles: SideTitles(showTitles: false)),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                getTitlesWidget: (v, _) {
+                                  const days = [
+                                    'M', 'T', 'W', 'T', 'F', 'S', 'S'
+                                  ];
+                                  final i = v.toInt();
+                                  if (i < 0 || i >= days.length) {
+                                    return const SizedBox.shrink();
+                                  }
+                                  return Text(
+                                    days[i],
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          barGroups: totals
+                              .asMap()
+                              .entries
+                              .map(
+                                (e) => BarChartGroupData(
+                                  x: e.key,
+                                  barRods: [
+                                    BarChartRodData(
+                                      toY: e.value,
+                                      color: AppColors.primary,
+                                      width: 22,
+                                      borderRadius: BorderRadius.circular(6),
+                                    ),
+                                  ],
+                                ),
+                              )
+                              .toList(),
+                        ),
+                      );
+                    }),
+                  ),
+                ),
+              ),
+            ],
+
             const SliverToBoxAdapter(child: SizedBox(height: 24)),
 
             // Period selector
@@ -170,9 +315,11 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                           margin: EdgeInsets.only(right: i < 2 ? 8 : 0),
                           padding: const EdgeInsets.symmetric(vertical: 10),
                           decoration: BoxDecoration(
-                            color: _selectedPeriod == i
-                                ? AppColors.primary
-                                : AppColors.surface,
+                            gradient: _selectedPeriod == i
+                                ? AppColors.heroGradient
+                                : null,
+                            color:
+                                _selectedPeriod == i ? null : AppColors.surface,
                             borderRadius: BorderRadius.circular(10),
                             border: Border.all(
                               color: _selectedPeriod == i
@@ -207,7 +354,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                 child: Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
-                    child: CircularProgressIndicator(),
+                    child: CircularProgressIndicator(color: AppColors.primary),
                   ),
                 ),
               )

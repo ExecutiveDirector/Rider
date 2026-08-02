@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/empty_state.dart';
 import '../../core/config/routes.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/models/order_model.dart';
@@ -75,7 +76,11 @@ class _CompletedOrdersScreenState
       body: state.isLoading && orders.isEmpty
           ? const Center(child: CircularProgressIndicator())
           : orders.isEmpty
-              ? _EmptyState()
+              ? const AppEmptyState(
+                  icon: Icons.check_circle_outline,
+                  title: 'No completed orders yet',
+                  message: 'Your delivery history will appear here',
+                )
               : RefreshIndicator(
                   onRefresh: () async {
                     _page = 1;
@@ -124,6 +129,13 @@ class _CompletedOrderCard extends StatelessWidget {
           color: AppColors.surface,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(color: AppColors.divider),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.03),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
         ),
         child: Row(
           children: [
@@ -202,50 +214,5 @@ class _CompletedOrderCard extends StatelessWidget {
 
   String _fmt(DateTime dt) {
     return DateFormat('d MMM').format(dt);
-  }
-}
-
-class _EmptyState extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: AppColors.success.withOpacity(0.08),
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: const Icon(
-                Icons.check_circle_outline,
-                size: 40,
-                color: AppColors.success,
-              ),
-            ),
-            const SizedBox(height: 20),
-            const Text(
-              'No completed orders yet',
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
-              ),
-            ),
-            const SizedBox(height: 6),
-            const Text(
-              'Your delivery history will appear here',
-              textAlign: TextAlign.center,
-              style:
-                  TextStyle(color: AppColors.textSecondary, fontSize: 13),
-            ),
-          ],
-        ),
-      ),
-    );
   }
 }

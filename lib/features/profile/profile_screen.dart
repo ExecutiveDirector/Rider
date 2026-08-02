@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/stat_tile.dart';
 import '../../core/config/routes.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/services/notification_service.dart';
@@ -18,68 +19,112 @@ class ProfileScreen extends ConsumerWidget {
     final driver = ref.watch(authProvider).driver;
 
     return Scaffold(
-      backgroundColor: const Color(0xffF7F9FC),
+      backgroundColor: AppColors.background,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 280,
             pinned: true,
             elevation: 0,
-            backgroundColor: AppColors.primary,
+            backgroundColor: AppColors.primaryDark,
             flexibleSpace: FlexibleSpaceBar(
-              background: SafeArea(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
+              background: Container(
+                decoration: const BoxDecoration(gradient: AppColors.heroGradient),
+                child: Stack(
                   children: [
-                    const SizedBox(height: 30),
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.white,
-                      backgroundImage: driver?.avatarUrl != null
-                          ? NetworkImage(driver!.avatarUrl!)
-                          : null,
-                      child: driver?.avatarUrl == null
-                          ? Text(
-                              driver?.name.substring(0, 1).toUpperCase() ?? "R",
-                              style: const TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.primary,
-                              ),
-                            )
-                          : null,
-                    ),
-                    const SizedBox(height: 16),
-                    Text(
-                      driver?.name ?? "Rider",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
+                    Positioned(
+                      top: -50,
+                      left: -40,
+                      child: Container(
+                        width: 180,
+                        height: 180,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: RadialGradient(
+                            colors: [
+                              AppColors.accentMint.withOpacity(0.22),
+                              AppColors.accentMint.withOpacity(0),
+                            ],
+                          ),
+                        ),
                       ),
                     ),
-                    const SizedBox(height: 6),
-                    Text(
-                      driver?.phone ?? '',
-                      style: const TextStyle(
-                        color: Colors.white70,
+                    SafeArea(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const SizedBox(height: 30),
+                          Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                            ),
+                            child: CircleAvatar(
+                              radius: 48,
+                              backgroundColor: AppColors.primaryLight,
+                              backgroundImage: driver?.avatarUrl != null
+                                  ? NetworkImage(driver!.avatarUrl!)
+                                  : null,
+                              child: driver?.avatarUrl == null
+                                  ? Text(
+                                      driver?.name.substring(0, 1).toUpperCase() ??
+                                          "R",
+                                      style: const TextStyle(
+                                        fontSize: 34,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppColors.primaryDark,
+                                      ),
+                                    )
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            driver?.name ?? "Rider",
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 22,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            driver?.phone ?? '',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.18),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: const [
+                                Icon(
+                                  Icons.verified,
+                                  color: Color(0xFFFBBF24),
+                                  size: 16,
+                                ),
+                                SizedBox(width: 5),
+                                Text(
+                                  "Verified Rider",
+                                  style: TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(
-                          Icons.verified,
-                          color: Colors.greenAccent,
-                          size: 18,
-                        ),
-                        const SizedBox(width: 4),
-                        const Text(
-                          "Verified Rider",
-                          style: TextStyle(color: Colors.white),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -203,20 +248,24 @@ class ProfileScreen extends ConsumerWidget {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Card(
-                    color: Colors.red.shade50,
-                    shape: RoundedRectangleBorder(
+                  Container(
+                    decoration: BoxDecoration(
+                      color: AppColors.error.withOpacity(0.06),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: AppColors.error.withOpacity(0.2)),
                     ),
                     child: ListTile(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       leading: const Icon(
                         Icons.logout,
-                        color: Colors.red,
+                        color: AppColors.error,
                       ),
                       title: const Text(
                         "Logout",
                         style: TextStyle(
-                          color: Colors.red,
+                          color: AppColors.error,
                           fontWeight: FontWeight.w600,
                         ),
                       ),
@@ -234,6 +283,9 @@ class ProfileScreen extends ConsumerWidget {
                                 child: const Text("Cancel"),
                               ),
                               ElevatedButton(
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.error,
+                                ),
                                 onPressed: () => Navigator.pop(context, true),
                                 child: const Text("Logout"),
                               ),
@@ -275,59 +327,32 @@ class ProfileScreen extends ConsumerWidget {
     return Row(
       children: [
         Expanded(
-          child: _statCard(
-            Icons.star,
-            "${driver?.rating?.toStringAsFixed(1) ?? '0.0'}",
-            "Rating",
+          child: StatTile(
+            icon: Icons.star,
+            value: "${driver?.rating?.toStringAsFixed(1) ?? '0.0'}",
+            label: "Rating",
+            color: const Color(0xFFF59E0B),
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _statCard(
-            Icons.local_shipping,
-            "${driver?.totalDeliveries ?? 0}",
-            "Deliveries",
+          child: StatTile(
+            icon: Icons.local_shipping,
+            value: "${driver?.totalDeliveries ?? 0}",
+            label: "Deliveries",
+            color: AppColors.accent,
           ),
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: _statCard(
-            Icons.check_circle,
-            "Active",
-            "Status",
+          child: StatTile(
+            icon: Icons.check_circle,
+            value: "Active",
+            label: "Status",
+            color: AppColors.primary,
           ),
         ),
       ],
-    );
-  }
-
-  Widget _statCard(
-    IconData icon,
-    String value,
-    String label,
-  ) {
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        vertical: 18,
-      ),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: AppColors.primary),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.bold,
-              fontSize: 18,
-            ),
-          ),
-          Text(label),
-        ],
-      ),
     );
   }
 
@@ -337,20 +362,22 @@ class ProfileScreen extends ConsumerWidget {
   }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: AppColors.surface,
         borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: AppColors.divider),
       ),
       child: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 4),
             child: Align(
               alignment: Alignment.centerLeft,
               child: Text(
                 title,
                 style: const TextStyle(
                   fontWeight: FontWeight.bold,
-                  fontSize: 16,
+                  fontSize: 15,
+                  color: AppColors.textPrimary,
                 ),
               ),
             ),
@@ -367,9 +394,16 @@ class ProfileScreen extends ConsumerWidget {
     VoidCallback onTap,
   ) {
     return ListTile(
-      leading: Icon(icon),
+      leading: Container(
+        padding: const EdgeInsets.all(7),
+        decoration: BoxDecoration(
+          color: AppColors.primary.withOpacity(0.08),
+          borderRadius: BorderRadius.circular(9),
+        ),
+        child: Icon(icon, color: AppColors.primary, size: 19),
+      ),
       title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
+      trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
       onTap: onTap,
     );
   }

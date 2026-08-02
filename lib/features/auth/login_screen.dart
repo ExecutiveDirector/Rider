@@ -1,8 +1,11 @@
 // lib/features/auth/login_screen.dart
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/app_logo_mark.dart';
+import '../../core/widgets/gradient_button.dart';
 import '../../core/config/routes.dart';
 import '../../core/services/socket_service.dart';
 import '../../core/services/storage_service.dart';
@@ -173,51 +176,71 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authProvider);
+    final topInset = MediaQuery.of(context).padding.top;
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 60),
-
-                // Logo
-                Container(
-                  width: 60,
-                  height: 60,
-                  decoration: BoxDecoration(
-                    color: AppColors.primary,
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  child: const Center(
-                    child: Text('🔥', style: TextStyle(fontSize: 30)),
-                  ),
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: SystemUiOverlayStyle.light,
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        body: Column(
+          children: [
+            // ── Hero header ───────────────────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.fromLTRB(24, topInset + 26, 24, 32),
+              decoration: const BoxDecoration(
+                gradient: AppColors.heroGradient,
+                borderRadius: BorderRadius.only(
+                  bottomLeft: Radius.circular(32),
+                  bottomRight: Radius.circular(32),
                 ),
-                const SizedBox(height: 28),
-
-                const Text(
-                  'Welcome back,\nRider 👋',
-                  style: TextStyle(
-                    fontSize: 30,
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                    height: 1.2,
-                    letterSpacing: -0.5,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      const AppLogoMark(size: 50, glow: false),
+                      const Spacer(),
+                      Icon(
+                        Icons.local_shipping_outlined,
+                        color: Colors.white.withOpacity(0.8),
+                        size: 22,
+                      ),
+                    ],
                   ),
-                ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Login to start accepting deliveries',
-                  style: TextStyle(
-                      color: AppColors.textSecondary, fontSize: 15),
-                ),
-                const SizedBox(height: 40),
+                  const SizedBox(height: 22),
+                  const Text(
+                    'Welcome back,\nRider 👋',
+                    style: TextStyle(
+                      fontSize: 27,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.white,
+                      height: 1.2,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Login to start accepting deliveries',
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.82),
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
+            // ── Form card ─────────────────────────────────────────────────
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
+                child: Form(
+                  key: _formKey,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                 // ── Smart identifier field ─────────────────────────────────
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
@@ -307,27 +330,18 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 24),
 
                 // ── Login button ───────────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: authState.isLoading ? null : _login,
-                    child: authState.isLoading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Text('Login'),
-                  ),
+                GradientButton(
+                  label: 'Login',
+                  loading: authState.isLoading,
+                  onPressed: authState.isLoading ? null : _login,
                 ),
                 const SizedBox(height: 40),
-              ],
+                    ],
+                  ),
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/gradient_button.dart';
 import '../../core/config/routes.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/models/order_model.dart';
@@ -133,6 +134,16 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
           children: [
             _StatusCard(order: order),
             const SizedBox(height: 20),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: _OrderProgressStepper(status: order.status),
+            ),
+            const SizedBox(height: 16),
             _SectionCard(
               title: 'Customer',
               children: [
@@ -194,23 +205,12 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
               // Only show "Complete" once the rider has actually accepted
               if (order.status == OrderStatus.accepted ||
                   order.status == OrderStatus.inTransit)
-                ElevatedButton.icon(
-                  icon: const Icon(Icons.check_circle_outline),
-                  label: _isCompleting
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Text('Complete Delivery'),
+                GradientButton(
+                  icon: Icons.check_circle_outline,
+                  label: 'Complete Delivery',
+                  loading: _isCompleting,
                   onPressed:
                       _isCompleting ? null : () => _deliverOrder(order.id),
-                  style: ElevatedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
-                  ),
                 ),
             ],
           ],
@@ -229,16 +229,28 @@ class _StatusCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.primaryDark],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: AppColors.heroGradient,
         borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withOpacity(0.28),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Row(
         children: [
-          const Text('🔥', style: TextStyle(fontSize: 36)),
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.16),
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: const Icon(Icons.local_fire_department,
+                color: Colors.white, size: 28),
+          ),
           const SizedBox(width: 16),
           Expanded(
             child: Column(
@@ -280,6 +292,124 @@ class _StatusCard extends StatelessWidget {
   }
 }
 
+// ─── Order progress stepper ────────────────────────────────────────────────
+
+class _OrderProgressStepper extends StatelessWidget {
+  final OrderStatus status;
+  const _OrderProgressStepper({required this.status});
+
+  static const _labels = ['Pending', 'Pickup', 'En Route', 'Delivered'];
+  static const _icons = [
+    Icons.inventory_2_outlined,
+    Icons.storefront_outlined,
+    Icons.two_wheeler_outlined,
+    Icons.check_circle_outline,
+  ];
+
+  int get _currentIndex {
+    switch (status) {
+      case OrderStatus.pending:
+        return 0;
+      case OrderStatus.accepted:
+        return 1;
+      case OrderStatus.inTransit:
+        return 2;
+      case OrderStatus.delivered:
+        return 3;
+      case OrderStatus.cancelled:
+        return -1;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = _currentIndex;
+
+    if (current < 0) {
+      return Container(
+        padding: const EdgeInsets.all(4),
+        child: const Row(
+          children: [
+            Icon(Icons.cancel_outlined, color: AppColors.cancelled, size: 18),
+            SizedBox(width: 8),
+            Text('This order was cancelled',
+                style: TextStyle(
+                    color: AppColors.cancelled,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13)),
+          ],
+        ),
+      );
+    }
+
+    return Row(
+      children: List.generate(_labels.length, (i) {
+        final done = i < current;
+        final active = i == current;
+        final circleColor = done
+            ? AppColors.primary
+            : active
+                ? AppColors.primary.withOpacity(0.14)
+                : AppColors.background;
+        final borderColor =
+            done || active ? AppColors.primary : AppColors.divider;
+        final iconColor = done
+            ? Colors.white
+            : active
+                ? AppColors.primary
+                : AppColors.textHint;
+
+        final dot = Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 30,
+              height: 30,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: circleColor,
+                border: Border.all(color: borderColor, width: active ? 2 : 1),
+              ),
+              child: Icon(done ? Icons.check : _icons[i],
+                  size: 15, color: iconColor),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              _labels[i],
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: active ? FontWeight.w800 : FontWeight.w500,
+                color: done || active
+                    ? AppColors.textPrimary
+                    : AppColors.textHint,
+              ),
+            ),
+          ],
+        );
+
+        if (i == _labels.length - 1) return dot;
+        return Expanded(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              dot,
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 14),
+                  child: Container(
+                    height: 2,
+                    color: i < current ? AppColors.primary : AppColors.divider,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      }),
+    );
+  }
+}
+
 class _SectionCard extends StatelessWidget {
   final String title;
   final List<Widget> children;
@@ -307,14 +437,27 @@ class _SectionCard extends StatelessWidget {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  title,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 14,
-                    color: AppColors.textSecondary,
-                    letterSpacing: 0.5,
-                  ),
+                Row(
+                  children: [
+                    Container(
+                      width: 4,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: AppColors.primary,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                        color: AppColors.textSecondary,
+                        letterSpacing: 0.3,
+                      ),
+                    ),
+                  ],
                 ),
                 if (trailing != null) trailing!,
               ],
@@ -345,25 +488,38 @@ class _DetailRow extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 17, color: AppColors.textSecondary),
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppColors.primary.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 14, color: AppColors.primary),
+          ),
           const SizedBox(width: 10),
           SizedBox(
-            width: 80,
-            child: Text(
-              label,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 13,
+            width: 72,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                label,
+                style: const TextStyle(
+                  color: AppColors.textSecondary,
+                  fontSize: 13,
+                ),
               ),
             ),
           ),
           Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                color: AppColors.textPrimary,
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Text(
+                value,
+                style: const TextStyle(
+                  color: AppColors.textPrimary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13,
+                ),
               ),
             ),
           ),

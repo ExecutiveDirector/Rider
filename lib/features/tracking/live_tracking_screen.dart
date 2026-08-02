@@ -3,8 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/widgets/pulse_dot.dart';
+import '../../core/widgets/gradient_button.dart';
 import '../../data/providers/tracking_provider.dart';
+import '../../data/providers/directions_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/models/order_model.dart';
 
@@ -33,6 +37,9 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   @override
   void dispose() {
     ref.read(trackingProvider.notifier).stopTracking();
+    // FIX: previously built but never wired up anywhere — clear it here so
+    // a stale route/ETA from this delivery doesn't leak into the next one.
+    ref.read(directionsProvider.notifier).clear();
     _mapController?.dispose();
     super.dispose();
   }
@@ -50,9 +57,40 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     _mapController?.animateCamera(CameraUpdate.newLatLng(pos));
   }
 
+  Future<void> _callCustomer(String phone) async {
+    if (phone.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Phone number not available')),
+        );
+      }
+      return;
+    }
+    final uri = Uri.parse('tel:$phone');
+    if (await canLaunchUrl(uri)) {
+      launchUrl(uri);
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not open phone dialler')),
+        );
+      }
+    }
+  }
+
+  Future<void> _openExternalMaps(double lat, double lng) async {
+    final uri = Uri.parse(
+      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
+    );
+    if (await canLaunchUrl(uri)) launchUrl(uri);
+  }
+
   Set<Marker> _buildMarkers(TrackingState tracking, OrderModel? order) {
     final markers = <Marker>{};
 
+    // "You are here" stays the universal map-blue every rider already reads
+    // instantly — brand color goes on the chrome and route instead, not on
+    // the one marker that needs to be recognized at a glance while riding.
     if (tracking.currentPosition != null) {
       markers.add(Marker(
         markerId: const MarkerId('rider'),
@@ -77,15 +115,24 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     return markers;
   }
 
-  Set<Polyline> _buildPolylines(TrackingState tracking) {
-    if (tracking.routePoints.length < 2) return {};
+  Set<Polyline> _buildPolylines(DirectionsState directions) {
+    if (directions.routePoints.length < 2) return {};
+    // A soft white casing under the brand-green line reads as a proper
+    // navigation route rather than a plain single-color stroke.
     return {
       Polyline(
+        polylineId: const PolylineId('route_casing'),
+        points: directions.routePoints,
+        color: Colors.white,
+        width: 8,
+        zIndex: 1,
+      ),
+      Polyline(
         polylineId: const PolylineId('route'),
-        points: tracking.routePoints,
+        points: directions.routePoints,
         color: AppColors.primary,
-        width: 4,
-        patterns: [PatternItem.dash(20), PatternItem.gap(8)],
+        width: 5,
+        zIndex: 2,
       ),
     };
   }
@@ -93,13 +140,24 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   @override
   Widget build(BuildContext context) {
     final tracking = ref.watch(trackingProvider);
+    final directions = ref.watch(directionsProvider);
     final order = _getOrder();
+    final topInset = MediaQuery.of(context).padding.top;
 
-    // Animate to rider when position updates
+    // Animate to rider when position updates, and keep the route/ETA to the
+    // destination current. DirectionsNotifier throttles internally (min
+    // distance + min interval) so this is safe to call on every GPS tick.
     ref.listen(
       trackingProvider.select((s) => s.currentPosition),
       (prev, next) {
-        if (next != null) _animateCameraToPosition(next);
+        if (next == null) return;
+        _animateCameraToPosition(next);
+        if (order != null) {
+          ref.read(directionsProvider.notifier).updateRoute(
+                origin: next,
+                destination: LatLng(order.deliveryLat, order.deliveryLng),
+              );
+        }
       },
     );
 
@@ -136,14 +194,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: AppColors.success,
-                  shape: BoxShape.circle,
-                ),
-              ),
+              const PulseDot(color: AppColors.primary, size: 7),
               const SizedBox(width: 8),
               const Text(
                 'Live Tracking',
@@ -170,12 +221,22 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
               _mapController = controller;
             },
             markers: _buildMarkers(tracking, order),
-            polylines: _buildPolylines(tracking),
+            polylines: _buildPolylines(directions),
             myLocationEnabled: true,
             myLocationButtonEnabled: false,
             zoomControlsEnabled: false,
             mapToolbarEnabled: false,
           ),
+
+          // ETA / distance banner — the live-tracking payoff: real data from
+          // directionsProvider, which previously had no UI consuming it.
+          if (order != null)
+            Positioned(
+              top: topInset + kToolbarHeight + 8,
+              left: 16,
+              right: 16,
+              child: _EtaBanner(directions: directions),
+            ),
 
           // Bottom order info panel
           if (order != null)
@@ -183,13 +244,18 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
               left: 0,
               right: 0,
               bottom: 0,
-              child: _TrackingInfoPanel(order: order),
+              child: _TrackingInfoPanel(
+                order: order,
+                onCall: () => _callCustomer(order.customerPhone),
+                onNavigate: () =>
+                    _openExternalMaps(order.deliveryLat, order.deliveryLng),
+              ),
             ),
 
           // Recenter button
           Positioned(
             right: 16,
-            bottom: order != null ? 200 : 100,
+            bottom: order != null ? 236 : 100,
             child: FloatingActionButton.small(
               onPressed: () {
                 if (tracking.currentPosition != null) {
@@ -206,14 +272,108 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   }
 }
 
+// ─── ETA / distance banner ─────────────────────────────────────────────────
+
+class _EtaBanner extends StatelessWidget {
+  final DirectionsState directions;
+  const _EtaBanner({required this.directions});
+
+  @override
+  Widget build(BuildContext context) {
+    final hasData = directions.durationText != null &&
+        directions.distanceText != null;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 6),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              gradient: AppColors.brightGradient,
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(Icons.navigation, color: Colors.white, size: 18),
+          ),
+          const SizedBox(width: 12),
+          if (hasData) ...[
+            Text(
+              directions.durationText!,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                color: AppColors.textPrimary,
+              ),
+            ),
+            const SizedBox(width: 6),
+            Text('to destination',
+                style: TextStyle(color: AppColors.textHint, fontSize: 12.5)),
+            const Spacer(),
+            Text(
+              directions.distanceText!,
+              style: const TextStyle(
+                color: AppColors.textSecondary,
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+              ),
+            ),
+          ] else if (directions.isLoading) ...[
+            const Text(
+              'Calculating route…',
+              style: TextStyle(
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13),
+            ),
+            const Spacer(),
+            const SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ] else ...[
+            const Text(
+              'Route unavailable',
+              style: TextStyle(
+                  color: AppColors.textHint,
+                  fontWeight: FontWeight.w600,
+                  fontSize: 13),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Bottom tracking info panel ────────────────────────────────────────────
+
 class _TrackingInfoPanel extends StatelessWidget {
   final OrderModel order;
-  const _TrackingInfoPanel({required this.order});
+  final VoidCallback onCall;
+  final VoidCallback onNavigate;
+
+  const _TrackingInfoPanel({
+    required this.order,
+    required this.onCall,
+    required this.onNavigate,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 20, 20, 32),
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 32),
       decoration: const BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -283,6 +443,31 @@ class _TrackingInfoPanel extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   fontSize: 16,
                   color: AppColors.primary,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onCall,
+                  icon: const Icon(Icons.call, size: 17),
+                  label: const Text('Call'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: GradientButton(
+                  label: 'Navigate',
+                  icon: Icons.navigation,
+                  height: 46,
+                  onPressed: onNavigate,
                 ),
               ),
             ],

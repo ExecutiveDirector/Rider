@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_colors.dart';
 import '../../core/config/routes.dart';
+import '../../core/widgets/empty_state.dart';
+import '../../core/widgets/status_pill.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
 
@@ -31,13 +33,14 @@ class _ActiveOrdersScreenState extends ConsumerState<ActiveOrdersScreen> {
     final state = ref.watch(orderProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: AppColors.background,
       appBar: AppBar(
         elevation: 0,
         title: Text('Active Orders (${state.activeOrders.length})'),
         centerTitle: false,
       ),
       body: RefreshIndicator(
+        color: AppColors.primary,
         onRefresh: _loadOrders,
         child: _buildBody(state),
       ),
@@ -46,27 +49,22 @@ class _ActiveOrdersScreenState extends ConsumerState<ActiveOrdersScreen> {
 
   Widget _buildBody(OrderState state) {
     if (state.isLoading && state.activeOrders.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
+      return const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
     }
 
     if (state.error != null && state.activeOrders.isEmpty) {
       return ListView(
+        padding: const EdgeInsets.only(top: 70),
         children: [
-          const SizedBox(height: 140),
-          const Icon(Icons.error_outline_rounded, size: 72, color: Colors.red),
-          const SizedBox(height: 16),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Text(state.error!, textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: 20),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
-            child: ElevatedButton.icon(
-              onPressed: _loadOrders,
-              icon: const Icon(Icons.refresh),
-              label: const Text('Retry'),
-            ),
+          AppEmptyState(
+            icon: Icons.error_outline_rounded,
+            title: 'Could not load orders',
+            message: state.error!,
+            iconColor: AppColors.error,
+            actionLabel: 'Retry',
+            onAction: _loadOrders,
           ),
         ],
       );
@@ -74,21 +72,12 @@ class _ActiveOrdersScreenState extends ConsumerState<ActiveOrdersScreen> {
 
     if (state.activeOrders.isEmpty) {
       return ListView(
+        padding: const EdgeInsets.only(top: 70),
         children: const [
-          SizedBox(height: 160),
-          Center(
-            child: Column(
-              children: [
-                Text('📦', style: TextStyle(fontSize: 64)),
-                SizedBox(height: 16),
-                Text('No Active Orders',
-                    style:
-                        TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                SizedBox(height: 8),
-                Text('Orders assigned to you will appear here',
-                    textAlign: TextAlign.center),
-              ],
-            ),
+          AppEmptyState(
+            icon: Icons.inventory_2_outlined,
+            title: 'No Active Orders',
+            message: 'Orders assigned to you will appear here',
           ),
         ],
       );
@@ -131,18 +120,21 @@ class OrderCard extends ConsumerStatefulWidget {
 class _OrderCardState extends ConsumerState<OrderCard> {
   bool _busy = false;
 
+  // Centralized so every screen reads the same order-status color —
+  // pending (amber) -> accepted (violet, at vendor) -> inTransit (sky,
+  // moving) -> delivered (brand green, the payoff).
   static Color _statusColor(OrderStatus s) {
     switch (s) {
       case OrderStatus.pending:
-        return AppColors.warning;
+        return AppColors.pending;
       case OrderStatus.accepted:
-        return AppColors.primary;
+        return AppColors.accepted;
       case OrderStatus.inTransit:
-        return const Color(0xFF722ED1);
+        return AppColors.inTransit;
       case OrderStatus.delivered:
-        return AppColors.success;
+        return AppColors.delivered;
       case OrderStatus.cancelled:
-        return AppColors.error;
+        return AppColors.cancelled;
     }
   }
 
@@ -154,7 +146,7 @@ class _OrderCardState extends ConsumerState<OrderCard> {
         return const _Btn(
           label: 'Confirm Pickup',
           icon: Icons.storefront_outlined,
-          color: Color(0xFF722ED1),
+          color: AppColors.accepted,
           confirmBody:
               'Confirm you have collected the gas cylinder from the vendor outlet.',
         );
@@ -163,7 +155,7 @@ class _OrderCardState extends ConsumerState<OrderCard> {
         return const _Btn(
           label: 'Mark Delivered',
           icon: Icons.check_circle_outline,
-          color: AppColors.success,
+          color: AppColors.delivered,
           confirmBody:
               'Confirm the gas cylinder has been delivered to the customer.',
         );
@@ -230,7 +222,7 @@ class _OrderCardState extends ConsumerState<OrderCard> {
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(18),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: AppColors.divider),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.04),
@@ -245,7 +237,7 @@ class _OrderCardState extends ConsumerState<OrderCard> {
             Container(
               height: 5,
               decoration: BoxDecoration(
-                color: color,
+                gradient: AppColors.statusGradient(color),
                 borderRadius:
                     const BorderRadius.vertical(top: Radius.circular(18)),
               ),
@@ -264,7 +256,7 @@ class _OrderCardState extends ConsumerState<OrderCard> {
                             style: const TextStyle(
                                 fontSize: 15, fontWeight: FontWeight.w800)),
                       ),
-                      _Badge(label: order.status.label, color: color),
+                      StatusPill(label: order.status.label, color: color),
                     ],
                   ),
 
@@ -312,24 +304,6 @@ class _OrderCardState extends ConsumerState<OrderCard> {
 }
 
 // ─── Small reusable widgets ───────────────────────────────────────────────────
-
-class _Badge extends StatelessWidget {
-  final String label;
-  final Color color;
-  const _Badge({required this.label, required this.color});
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(30),
-        ),
-        child: Text(label,
-            style: TextStyle(
-                color: color, fontWeight: FontWeight.w700, fontSize: 12)),
-      );
-}
 
 class _ActionButton extends StatelessWidget {
   final _Btn btn;
