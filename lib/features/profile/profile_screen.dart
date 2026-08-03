@@ -10,6 +10,9 @@ import '../../core/services/socket_service.dart';
 import '../../core/services/notification_service.dart';
 import '../../core/services/notification_watcher_service.dart';
 import '../../data/providers/auth_provider.dart';
+import '../../data/providers/order_provider.dart';
+import '../../data/providers/earnings_provider.dart';
+import '../../data/providers/support_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
   const ProfileScreen({super.key});
