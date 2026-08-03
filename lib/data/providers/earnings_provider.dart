@@ -60,6 +60,9 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
       state = state.copyWith(isLoading: false, error: e.toString());
     }
   }
+
+  /// Called on logout — see OrderNotifier.reset() for why this matters.
+  void reset() => state = const EarningsState();
 }
 
 final earningsProvider = StateNotifierProvider<EarningsNotifier, EarningsState>(

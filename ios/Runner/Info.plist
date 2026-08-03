@@ -4,8 +4,6 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>$(DEVELOPMENT_LANGUAGE)</string>
-	<key>CFBundleDisplayName</key>
-	<string>Riverpod Counter</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -14,8 +12,12 @@
 	<string>6.0</string>
 	<key>CFBundleName</key>
 	<string>aquagasrider</string>
-<key>CFBundleDisplayName</key>
-<string>aquagasrider</string>
+	<key>CFBundleDisplayName</key>
+	<string>AquaGas Rider</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>AquaGas Rider uses your location to show nearby orders and share your live position with the customer during delivery.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>AquaGas Rider uses your location to show nearby orders and share your live position with the customer during delivery.</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>

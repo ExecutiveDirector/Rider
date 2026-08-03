@@ -113,33 +113,36 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                 key: _formKey,
                 child: Column(
                   children: [
-                    // ── First Name ──────────────────────────────────
+                    // ── First Name (read-only — unique identity field,
+                    // must match KYC docs; changes go through support) ──
                     TextFormField(
                       controller: _firstNameCtr,
+                      readOnly: true,
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'First Name',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: const OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                        helperText: 'Contact support to change your name',
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'First name is required'
-                          : null,
                     ),
                     const SizedBox(height: 16),
 
-                    // ── Last Name ───────────────────────────────────
+                    // ── Last Name (read-only — see First Name) ─────────
                     TextFormField(
                       controller: _lastNameCtr,
+                      readOnly: true,
                       textCapitalization: TextCapitalization.words,
-                      decoration: const InputDecoration(
+                      decoration: InputDecoration(
                         labelText: 'Last Name',
-                        prefixIcon: Icon(Icons.person_outline),
-                        border: OutlineInputBorder(),
+                        prefixIcon: const Icon(Icons.person_outline),
+                        border: const OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                        helperText: 'Contact support to change your name',
                       ),
-                      validator: (v) => (v == null || v.trim().isEmpty)
-                          ? 'Last name is required'
-                          : null,
                     ),
                     const SizedBox(height: 16),
 
@@ -173,14 +176,21 @@ class _EditProfileScreenState extends ConsumerState<EditProfileScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // ── National ID ─────────────────────────────────
+                    // ── National ID (read-only — unique government ID,
+                    // must match KYC docs; changes go through support) ──
                     TextFormField(
                       controller: _nationalIdCtr,
+                      readOnly: true,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(
-                        labelText: 'National ID (optional)',
-                        prefixIcon: Icon(Icons.badge_outlined),
-                        border: OutlineInputBorder(),
+                      decoration: InputDecoration(
+                        labelText: 'National ID',
+                        prefixIcon: const Icon(Icons.badge_outlined),
+                        border: const OutlineInputBorder(),
+                        filled: true,
+                        fillColor: Colors.grey.shade100,
+                        helperText: _nationalIdCtr.text.isEmpty
+                            ? 'Contact support to add your National ID'
+                            : 'Contact support to change your National ID',
                       ),
                     ),
                     const SizedBox(height: 32),

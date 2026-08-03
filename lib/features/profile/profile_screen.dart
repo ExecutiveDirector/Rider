@@ -300,6 +300,11 @@ class ProfileScreen extends ConsumerWidget {
                           SocketService.instance.disconnect();
                           NotificationWatcherService.instance.reset();
                           await NotificationService.instance.unregisterToken();
+                          // FIX: see settings_screen.dart — clear cached
+                          // order/earnings state too, not just auth.
+                          ref.read(orderProvider.notifier).reset();
+                          ref.read(earningsProvider.notifier).reset();
+                          ref.read(supportProvider.notifier).reset();
                           await ref.read(authProvider.notifier).logout();
 
                           if (context.mounted) {

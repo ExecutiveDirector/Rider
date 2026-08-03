@@ -12,6 +12,10 @@ import '../../core/services/notification_service.dart';
 import '../../core/services/notification_watcher_service.dart';
 import '../../data/providers/auth_provider.dart';
 import '../../data/providers/theme_provider.dart';
+import '../../data/providers/order_provider.dart';
+import '../../data/providers/earnings_provider.dart';
+import '../../data/providers/support_provider.dart';
+import '../support/support_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -98,6 +102,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     SocketService.instance.disconnect();
     NotificationWatcherService.instance.reset();
     await NotificationService.instance.unregisterToken();
+    // FIX: authProvider was the only state cleared on logout — active
+    // orders and earnings stayed cached in memory, so on a shared device
+    // the next rider to log in could briefly see the previous rider's
+    // order details before the first fetch overwrote them.
+    ref.read(orderProvider.notifier).reset();
+    ref.read(earningsProvider.notifier).reset();
+    ref.read(supportProvider.notifier).reset();
     await ref.read(authProvider.notifier).logout();
     if (mounted) {
       Navigator.pushNamedAndRemoveUntil(
@@ -168,9 +179,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _sectionTitle('Support'),
           _tile(
             icon: Icons.contact_support_outlined,
-            title: 'Contact Support',
-            subtitle: 'Get assistance from AquaGas',
-            onTap: () => _launch('mailto:support@aquagas.co.ke'),
+            title: 'Help & Support',
+            subtitle: 'Raise a ticket or browse FAQs',
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SupportScreen()),
+            ),
           ),
           _tile(
             icon: Icons.article_outlined,

@@ -472,6 +472,31 @@ class _TrackingInfoPanel extends StatelessWidget {
               ),
             ],
           ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: onCall,
+                  icon: const Icon(Icons.call, size: 17),
+                  label: const Text('Call'),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(46),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                flex: 2,
+                child: GradientButton(
+                  label: 'Navigate',
+                  icon: Icons.navigation,
+                  height: 46,
+                  onPressed: onNavigate,
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

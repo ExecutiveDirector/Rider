@@ -4,6 +4,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../constants/api_constants.dart';
 import 'storage_service.dart';
+import 'provider_container.dart';
+import '../../data/providers/auth_provider.dart';
+import '../../data/providers/order_provider.dart';
+import '../../data/providers/earnings_provider.dart';
+import '../../data/providers/support_provider.dart';
 
 /// Global navigator key — set on MaterialApp so the auth interceptor can
 /// push to /login from outside the widget tree when a token refresh fails.
@@ -135,6 +140,17 @@ class _AuthInterceptor extends Interceptor {
 
   Future<void> _forceLogout() async {
     await StorageService.instance.clearAll();
+    // FIX: this path (refresh-token failure) only ever cleared storage and
+    // navigated to /login — it never touched Riverpod state, unlike the
+    // manual logout buttons in Settings/Profile. So a session that expired
+    // mid-use (rather than an explicit tap on "Logout") left the previous
+    // rider's driver/orders/earnings sitting in memory: the login screen
+    // showed, but anything that read those providers directly — without
+    // re-fetching first — would still render stale data.
+    appContainer.read(authProvider.notifier).state = const AuthState();
+    appContainer.read(orderProvider.notifier).reset();
+    appContainer.read(earningsProvider.notifier).reset();
+    appContainer.read(supportProvider.notifier).reset();
     // FIX: navigate to login from anywhere in the app via the global key
     navigatorKey.currentState
         ?.pushNamedAndRemoveUntil('/login', (route) => false);

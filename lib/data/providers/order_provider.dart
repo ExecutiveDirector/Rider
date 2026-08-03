@@ -185,6 +185,13 @@ class OrderNotifier extends StateNotifier<OrderState> {
 
   void dismissIncomingOrder() => state = state.copyWith(clearIncoming: true);
 
+  /// Called on logout — without this, a rider's active/completed orders
+  /// stayed in memory after logout (authProvider was the only state reset),
+  /// so if another rider logged in on the same device, the previous
+  /// rider's order details could still flash on screen until the next
+  /// fetch completed.
+  void reset() => state = const OrderState();
+
   void _replaceActive(OrderModel updated) {
     state = state.copyWith(
       activeOrders: state.activeOrders

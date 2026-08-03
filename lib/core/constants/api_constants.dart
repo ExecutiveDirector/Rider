@@ -40,6 +40,11 @@ class ApiConstants {
   static const String updateProfile = '/riders/profile';
   static const String uploadDocument = '/riders/profile/documents';
 
+  // Support — was a bare mailto: link in the app; the backend already has
+  // a full ticket system (used by the customer/vendor apps) at /support.
+  static const String supportTickets = '/support/tickets';
+  static const String supportFaq = '/support/faq';
+
   static const String directionsApiKey = String.fromEnvironment(
     'DIRECTIONS_API_KEY',
     defaultValue: '',
