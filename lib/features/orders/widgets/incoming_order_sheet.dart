@@ -20,22 +20,27 @@ class IncomingOrderSheet extends ConsumerStatefulWidget {
 
 class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
     with SingleTickerProviderStateMixin {
-  static const _autoRejectSeconds = 20;
-  int _remaining = _autoRejectSeconds;
+  static const _defaultSeconds = 20;
+
+  // The countdown is computed from a fixed deadline rather than by counting
+  // ticks, so a delayed timer (busy frame, backgrounded app) can't stretch
+  // the offer beyond what dispatch allowed.
+  late DateTime _deadline;
+  late final int _totalSeconds;
+  int _remaining = _defaultSeconds;
   Timer? _timer;
   late AnimationController _pulseCtrl;
   bool _isAccepting = false;
-  // FIX: guard against auto-reject firing after manual accept/reject
+  // Guards against auto-reject / external dismissal firing after the rider
+  // has already accepted or rejected.
   bool _handled = false;
 
   @override
   void initState() {
     super.initState();
     // Rings continuously — like an incoming call — for as long as this
-    // sheet is on screen, so a new order can't be missed even if the
-    // phone is in a pocket or mounted with road noise. Stopped in
-    // dispose(), which fires on accept, reject, auto-reject timeout, and
-    // manual dismissal alike, so there's exactly one place to keep in sync.
+    // sheet is on screen. Stopped in dispose(), which fires on accept,
+    // reject, timeout and external dismissal alike.
     OrderAlertSoundService.instance.play();
 
     _pulseCtrl = AnimationController(
@@ -43,12 +48,31 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
       duration: const Duration(milliseconds: 800),
     )..repeat(reverse: true);
 
+    // Honour the server's offer window when it sends one, but clamp it: the
+    // phone's clock may be off, and an offer should never be shorter than the
+    // rider can physically react to, or longer than dispatch will wait.
+    var seconds = _defaultSeconds;
+    final expiresAt = widget.order.offerExpiresAt;
+    if (expiresAt != null) {
+      seconds =
+          expiresAt.difference(DateTime.now()).inSeconds.clamp(8, 45).toInt();
+    }
+    _totalSeconds = seconds;
+    _remaining = seconds;
+    _deadline = DateTime.now().add(Duration(seconds: seconds));
+    _startTimer();
+  }
+
+  void _startTimer() {
+    _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (_remaining <= 1) {
+      final left = (_deadline.difference(DateTime.now()).inMilliseconds / 1000)
+          .ceil();
+      if (left <= 0) {
         t.cancel();
         _reject(auto: true);
-      } else {
-        setState(() => _remaining--);
+      } else if (mounted) {
+        setState(() => _remaining = left);
       }
     });
   }
@@ -58,14 +82,27 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
     _handled = true;
     _timer?.cancel();
     setState(() => _isAccepting = true);
-    final success =
+
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    final ok =
         await ref.read(orderProvider.notifier).acceptOrder(widget.order.id);
-    if (mounted) {
-      Navigator.pop(context);
-      if (success) {
-        Navigator.pushNamed(context, AppRoutes.orderDetails,
-            arguments: widget.order.id);
-      }
+    if (!mounted) return;
+
+    navigator.pop();
+    if (ok) {
+      navigator.pushNamed(AppRoutes.orderDetails, arguments: widget.order.id);
+    } else {
+      // Previously the sheet closed as if the accept had worked. Tell the
+      // rider what actually happened.
+      final reason = ref.read(orderProvider).error;
+      messenger?.showSnackBar(SnackBar(
+        content: Text(reason == null || reason.isEmpty
+            ? 'Could not accept this order. It may have been taken.'
+            : reason),
+        backgroundColor: AppColors.error,
+        behavior: SnackBarBehavior.floating,
+      ));
     }
   }
 
@@ -79,17 +116,37 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
               ? 'Auto-rejected (timeout)'
               : (customReason ?? 'Rider declined'),
         );
-    if (mounted) Navigator.pop(context);
+    if (mounted) Navigator.of(context).pop();
   }
 
-  /// Manual reject: pause the countdown, ask why, then reject with that
-  /// reason. If the rider backs out of the dialog without picking a reason,
-  /// we leave the countdown stopped rather than guessing — they can tap
-  /// Reject again or Accept.
+  /// The offer disappeared underneath the rider (cancelled, reassigned, or
+  /// answered from another screen). Close the sheet and say why.
+  void _dismissedExternally() {
+    if (_handled) return;
+    _handled = true;
+    _timer?.cancel();
+    final messenger = ScaffoldMessenger.maybeOf(context);
+    Navigator.of(context).pop();
+    messenger?.showSnackBar(const SnackBar(
+      content: Text('That order is no longer available.'),
+      behavior: SnackBarBehavior.floating,
+    ));
+  }
+
+  /// Manual reject: pause the countdown while the reason dialog is open (an
+  /// auto-reject firing underneath it would pop the dialog instead of the
+  /// sheet), then reject with that reason. If the rider backs out, the
+  /// countdown resumes with the time that was left (never less than 5s).
   Future<void> _onRejectPressed() async {
     _timer?.cancel();
     final reason = await CancelReasonDialog.show(context);
-    if (reason == null || !mounted) return;
+    if (!mounted || _handled) return;
+    if (reason == null) {
+      final resumeFor = _remaining < 5 ? 5 : _remaining;
+      _deadline = DateTime.now().add(Duration(seconds: resumeFor));
+      _startTimer();
+      return;
+    }
     _reject(customReason: reason);
   }
 
@@ -103,8 +160,25 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
 
   @override
   Widget build(BuildContext context) {
-    final progress = _remaining / _autoRejectSeconds;
+    // Close if the offer is withdrawn while the sheet is open.
+    ref.listen<OrderModel?>(
+      orderProvider.select((s) => s.incomingOrder),
+      (prev, next) {
+        if (next == null || next.id != widget.order.id) {
+          _dismissedExternally();
+        }
+      },
+    );
+
+    final order = widget.order;
+    final progress = (_remaining / _totalSeconds).clamp(0.0, 1.0).toDouble();
     final urgent = progress <= 0.4;
+    final pickupLine = [
+      if (order.vendorName != null && order.vendorName!.isNotEmpty)
+        order.vendorName!,
+      if (order.pickupAddress != null && order.pickupAddress!.isNotEmpty)
+        order.pickupAddress!,
+    ].join(' · ');
 
     return Container(
       decoration: BoxDecoration(
@@ -121,8 +195,6 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Top accent bar — a quick "this needs you" signal before anything
-          // else even renders.
           Container(
             height: 5,
             decoration: const BoxDecoration(
@@ -135,7 +207,6 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                // Drag handle
                 Container(
                   width: 36,
                   height: 4,
@@ -181,7 +252,6 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
                         ),
                       ),
                     ),
-                    // Countdown circle
                     SizedBox(
                       width: 48,
                       height: 48,
@@ -214,36 +284,46 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
                 const Divider(),
                 const SizedBox(height: 16),
 
-                // Order details
+                if (pickupLine.isNotEmpty) ...[
+                  _InfoRow(
+                    icon: Icons.storefront_outlined,
+                    label: 'Pick up',
+                    value: pickupLine,
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 _InfoRow(
                   icon: Icons.person_outline,
                   label: 'Customer',
-                  value: widget.order.customerName,
+                  value: order.customerName,
                 ),
                 const SizedBox(height: 10),
                 _InfoRow(
                   icon: Icons.location_on_outlined,
                   label: 'Deliver to',
-                  value: widget.order.deliveryAddress,
+                  value: order.deliveryAddress,
                 ),
                 const SizedBox(height: 10),
                 _InfoRow(
                   icon: Icons.local_fire_department_outlined,
                   label: 'Gas',
-                  value: '${widget.order.quantity}kg ${widget.order.gasType}',
+                  value:
+                      '${order.quantity.toStringAsFixed(0)} × ${order.gasType}',
                 ),
-                if (widget.order.distanceKm != null) ...[
+                if (order.distanceKm != null) ...[
                   const SizedBox(height: 10),
                   _InfoRow(
                     icon: Icons.directions_outlined,
                     label: 'Distance',
-                    value: '${widget.order.distanceKm!.toStringAsFixed(1)} km',
+                    value: '${order.distanceKm!.toStringAsFixed(1)} km',
                   ),
                 ],
 
                 const SizedBox(height: 16),
 
-                // Earnings highlight
+                // Earnings highlight. Only labelled "You earn" when the
+                // backend actually sends the rider's share; otherwise show
+                // the order total honestly rather than implying it is pay.
                 Container(
                   padding:
                       const EdgeInsets.symmetric(vertical: 14, horizontal: 20),
@@ -261,12 +341,13 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text(
-                        'You earn',
-                        style: TextStyle(color: Colors.white70, fontSize: 14),
+                      Text(
+                        order.riderEarning != null ? 'You earn' : 'Order total',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 14),
                       ),
                       Text(
-                        'KES ${widget.order.totalAmount.toStringAsFixed(0)}',
+                        'KES ${(order.riderEarning ?? order.totalAmount).toStringAsFixed(0)}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w800,
@@ -278,9 +359,38 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
                   ),
                 ),
 
+                if (order.isCod) ...[
+                  const SizedBox(height: 10),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 10, horizontal: 14),
+                    decoration: BoxDecoration(
+                      color: AppColors.warning.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.payments_outlined,
+                            size: 18, color: AppColors.warning),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Cash on delivery — collect KES ${order.amountDue.toStringAsFixed(0)}',
+                            style: const TextStyle(
+                              color: AppColors.textPrimary,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
                 const SizedBox(height: 20),
 
-                // Action buttons
                 Row(
                   children: [
                     Expanded(

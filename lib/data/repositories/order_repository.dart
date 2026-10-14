@@ -1,6 +1,8 @@
 // lib/data/repositories/order_repository.dart
+import 'package:dio/dio.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/api_service.dart';
+import '../models/delivery_proof.dart';
 import '../models/order_model.dart';
 
 class OrderRepository {
@@ -72,5 +74,33 @@ class OrderRepository {
   Future<OrderModel> deliverOrder(String orderId) async {
     final res = await _api.patch('${ApiConstants.ordersBase}/$orderId/deliver');
     return OrderModel.fromJson(res.data['order'] ?? res.data);
+  }
+
+  /// Completes the delivery with proof. Sent as multipart when a photo is
+  /// attached, plain JSON otherwise (so a route without an upload middleware
+  /// still receives the fields).
+  Future<OrderModel> deliverWithProof(
+      String orderId, DeliveryProof proof) async {
+    final path = '${ApiConstants.ordersBase}/$orderId/deliver';
+    final fields = proof.toFields();
+
+    dynamic body = fields;
+    if (proof.hasPhoto) {
+      body = FormData.fromMap({
+        ...fields,
+        'proof_photo': await MultipartFile.fromFile(
+          proof.photoPath!,
+          filename: 'delivery_proof_$orderId.jpg',
+        ),
+      });
+    }
+
+    final res = await _api.patch(path, data: body);
+    final data = res.data;
+    if (data is Map) {
+      final order = data['order'] ?? data['data'] ?? data;
+      return OrderModel.fromJson(Map<String, dynamic>.from(order as Map));
+    }
+    throw StateError('Unexpected response from the delivery endpoint');
   }
 }

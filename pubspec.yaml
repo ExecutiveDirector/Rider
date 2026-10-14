@@ -46,6 +46,9 @@ dependencies:
   # Permissions
   permission_handler: ^11.3.0
 
+  # Proof of delivery — drop-off photo
+  image_picker: ^1.0.7
+
   # Network
   connectivity_plus: ^6.0.1
 

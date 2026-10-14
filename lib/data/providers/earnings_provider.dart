@@ -1,5 +1,6 @@
 // lib/data/providers/earnings_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/services/api_service.dart';
 import '../models/earnings_model.dart';
 import '../repositories/earnings_repository.dart';
 
@@ -47,7 +48,7 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
       final summary = await _repo.getSummary();
       state = state.copyWith(summary: summary, isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: dioErrorMessage(e));
     }
   }
 
@@ -57,7 +58,7 @@ class EarningsNotifier extends StateNotifier<EarningsState> {
       final earnings = await _repo.getEarnings(period: period);
       state = state.copyWith(earnings: earnings, isLoading: false);
     } catch (e) {
-      state = state.copyWith(isLoading: false, error: e.toString());
+      state = state.copyWith(isLoading: false, error: dioErrorMessage(e));
     }
   }
 

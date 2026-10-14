@@ -4,10 +4,12 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../constants/api_constants.dart';
 import 'storage_service.dart';
+import 'location_service.dart';
 import 'provider_container.dart';
 import '../../data/providers/auth_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/earnings_provider.dart';
+import '../../data/providers/cash_provider.dart';
 import '../../data/providers/support_provider.dart';
 
 /// Global navigator key — set on MaterialApp so the auth interceptor can
@@ -140,6 +142,7 @@ class _AuthInterceptor extends Interceptor {
 
   Future<void> _forceLogout() async {
     await StorageService.instance.clearAll();
+    LocationService.instance.stopTracking();
     // FIX: this path (refresh-token failure) only ever cleared storage and
     // navigated to /login — it never touched Riverpod state, unlike the
     // manual logout buttons in Settings/Profile. So a session that expired
@@ -150,6 +153,7 @@ class _AuthInterceptor extends Interceptor {
     appContainer.read(authProvider.notifier).state = const AuthState();
     appContainer.read(orderProvider.notifier).reset();
     appContainer.read(earningsProvider.notifier).reset();
+    appContainer.read(cashProvider.notifier).reset();
     appContainer.read(supportProvider.notifier).reset();
     // FIX: navigate to login from anywhere in the app via the global key
     navigatorKey.currentState

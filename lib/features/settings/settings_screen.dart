@@ -14,6 +14,7 @@ import '../../data/providers/auth_provider.dart';
 import '../../data/providers/theme_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/earnings_provider.dart';
+import '../../data/providers/cash_provider.dart';
 import '../../data/providers/support_provider.dart';
 import '../support/support_screen.dart';
 
@@ -108,6 +109,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // order details before the first fetch overwrote them.
     ref.read(orderProvider.notifier).reset();
     ref.read(earningsProvider.notifier).reset();
+    ref.read(cashProvider.notifier).reset();
     ref.read(supportProvider.notifier).reset();
     await ref.read(authProvider.notifier).logout();
     if (mounted) {

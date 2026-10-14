@@ -153,7 +153,7 @@ class _OrderCardState extends ConsumerState<OrderCard> {
       case OrderStatus.inTransit:
         // DB status is 'ready' — rider collected, now heading to customer
         return const _Btn(
-          label: 'Mark Delivered',
+          label: 'Complete Delivery',
           icon: Icons.check_circle_outline,
           color: AppColors.delivered,
           confirmBody:
@@ -165,6 +165,16 @@ class _OrderCardState extends ConsumerState<OrderCard> {
   }
 
   Future<void> _onAction(_Btn btn) async {
+    // Delivery needs proof (code / photo / cash), so it has its own screen.
+    if (widget.order.status == OrderStatus.inTransit) {
+      await Navigator.pushNamed<bool>(
+        context,
+        AppRoutes.proofOfDelivery,
+        arguments: widget.order.id,
+      );
+      return;
+    }
+
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -188,9 +198,7 @@ class _OrderCardState extends ConsumerState<OrderCard> {
     setState(() => _busy = true);
 
     final notifier = ref.read(orderProvider.notifier);
-    final success = widget.order.status == OrderStatus.accepted
-        ? await notifier.pickupOrder(widget.order.id)
-        : await notifier.deliverOrder(widget.order.id);
+    final success = await notifier.pickupOrder(widget.order.id);
 
     if (mounted) {
       setState(() => _busy = false);

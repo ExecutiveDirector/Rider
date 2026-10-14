@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/driver_model.dart';
 import '../repositories/auth_repository.dart';
 import '../../core/services/api_service.dart';
+import '../../core/services/location_service.dart';
 
 final authRepositoryProvider = Provider((_) => AuthRepository());
 
@@ -45,6 +46,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   Future<void> logout() async {
+    // Stop streaming this rider's location before the session goes away.
+    LocationService.instance.stopTracking();
     await _repo.logout();
     state = const AuthState();
   }

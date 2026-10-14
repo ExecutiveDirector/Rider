@@ -1,4 +1,5 @@
 // lib/data/models/order_model.dart
+import '../../core/utils/json_utils.dart';
 
 enum OrderStatus {
   pending,
@@ -69,6 +70,34 @@ class OrderModel {
   final String? notes;
   final double? distanceKm;
 
+  // ── Pickup (vendor outlet) ────────────────────────────────────────────────
+  final String? vendorName;
+  final String? pickupAddress;
+  final double? pickupLat;
+  final double? pickupLng;
+
+  // ── Payment / earnings ────────────────────────────────────────────────────
+  /// Lower-cased payment method as sent by the backend ('cod', 'mpesa', ...).
+  final String paymentMethod;
+
+  /// True when the customer pays the rider in cash at the door and the order
+  /// has not already been paid online.
+  final bool isCod;
+
+  /// Cash the rider must collect. 0 when the order is prepaid.
+  final double amountDue;
+
+  /// What the rider earns for this job, when the backend sends it. Null means
+  /// "unknown" — the UI must not present the order total as the rider's pay.
+  final double? riderEarning;
+
+  // ── Delivery proof ────────────────────────────────────────────────────────
+  /// Backend generated a code for the customer that the rider must enter.
+  final bool otpRequired;
+
+  /// When the offer lapses server-side (dispatch offers only).
+  final DateTime? offerExpiresAt;
+
   const OrderModel({
     required this.id,
     required this.orderNumber,
@@ -84,17 +113,34 @@ class OrderModel {
     required this.createdAt,
     this.notes,
     this.distanceKm,
+    this.vendorName,
+    this.pickupAddress,
+    this.pickupLat,
+    this.pickupLng,
+    this.paymentMethod = '',
+    this.isCod = false,
+    this.amountDue = 0,
+    this.riderEarning,
+    this.otpRequired = false,
+    this.offerExpiresAt,
   });
+
+  bool get hasDeliveryLocation => deliveryLat != 0 || deliveryLng != 0;
+
+  bool get hasPickupLocation =>
+      pickupLat != null &&
+      pickupLng != null &&
+      (pickupLat != 0 || pickupLng != 0);
 
   factory OrderModel.fromJson(Map<String, dynamic> json) {
     // ID: backend returns order_id (bigint) or id (string)
     final id = (json['id'] ?? json['order_id'] ?? '').toString();
 
-    final orderNumber = json['order_number'] as String? ?? id;
+    final orderNumber = json['order_number']?.toString() ?? id;
 
     // Customer: flat fields from getRiderActiveOrders,
     // or nested customer object from getOrderById
-    final customer = json['customer'] as Map?;
+    final customer = asMap(json['customer']);
     final customerName = customer?['full_name'] as String? ??
         json['customer_name'] as String? ??
         json['customerName'] as String? ??
@@ -111,16 +157,40 @@ class OrderModel {
         '';
 
     final deliveryLat =
-        ((json['delivery_latitude'] ?? json['deliveryLat'] ?? 0) as num)
-            .toDouble();
+        asDoubleOr(json['delivery_latitude'] ?? json['deliveryLat']);
     final deliveryLng =
-        ((json['delivery_longitude'] ?? json['deliveryLng'] ?? 0) as num)
-            .toDouble();
+        asDoubleOr(json['delivery_longitude'] ?? json['deliveryLng']);
+
+    // Pickup: flat pickup_* fields, or a nested outlet / vendor object.
+    final outlet = asMap(json['outlet']) ??
+        asMap(json['vendor_outlet']) ??
+        asMap(json['pickup']);
+    final vendor = asMap(json['vendor']);
+    final pickupLat = asDouble(json['pickup_latitude'] ??
+        json['pickupLat'] ??
+        outlet?['latitude'] ??
+        outlet?['lat']);
+    final pickupLng = asDouble(json['pickup_longitude'] ??
+        json['pickupLng'] ??
+        outlet?['longitude'] ??
+        outlet?['lng']);
+    final pickupAddress = (json['pickup_address'] ??
+            json['pickupAddress'] ??
+            outlet?['address'] ??
+            outlet?['address_line'])
+        ?.toString();
+    final vendorName = (json['vendor_name'] ??
+            json['vendorName'] ??
+            json['outlet_name'] ??
+            outlet?['name'] ??
+            vendor?['business_name'] ??
+            vendor?['name'])
+        ?.toString();
 
     // Items: pull gas type + quantity from first order_item
     final rawItems =
         json['items'] as List? ?? json['order_items'] as List? ?? [];
-    final firstItem = rawItems.isNotEmpty
+    final firstItem = rawItems.isNotEmpty && rawItems.first is Map
         ? Map<String, dynamic>.from(rawItems.first as Map)
         : <String, dynamic>{};
 
@@ -130,14 +200,34 @@ class OrderModel {
         'LPG Gas';
 
     final quantity =
-        ((firstItem['quantity'] ?? json['quantity'] ?? 1) as num).toDouble();
+        asDoubleOr(firstItem['quantity'] ?? json['quantity'], 1);
 
     // Totals: grand_total = total_amount + delivery_fee (computed server-side)
-    final totalAmount = ((json['grand_total'] ??
-            json['total_amount'] ??
-            json['totalAmount'] ??
-            0) as num)
-        .toDouble();
+    final totalAmount = asDoubleOr(json['grand_total'] ??
+        json['total_amount'] ??
+        json['totalAmount']);
+
+    // Payment
+    final paymentMethod =
+        (json['payment_method'] ?? json['paymentMethod'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+    final paymentStatus =
+        (json['payment_status'] ?? json['paymentStatus'] ?? '')
+            .toString()
+            .trim()
+            .toLowerCase();
+    final alreadyPaid = paymentStatus == 'paid' ||
+        paymentStatus == 'completed' ||
+        paymentStatus == 'success';
+    final isCod = !alreadyPaid &&
+        (paymentMethod == 'cod' ||
+            paymentMethod == 'cash' ||
+            paymentMethod == 'cash_on_delivery' ||
+            paymentMethod == 'cash on delivery');
+    final amountDue = asDouble(json['amount_due'] ?? json['cod_amount']) ??
+        (isCod ? totalAmount : 0.0);
 
     // Status: backend sends order_status (raw DB) or status (normalised)
     final rawStatus = json['order_status'] as String? ??
@@ -145,9 +235,12 @@ class OrderModel {
         'pending';
 
     final createdAt = DateTime.tryParse(
-          json['created_at'] as String? ?? json['createdAt'] as String? ?? '',
+          (json['created_at'] ?? json['createdAt'] ?? '').toString(),
         ) ??
         DateTime.now();
+
+    final expiresRaw =
+        (json['offer_expires_at'] ?? json['offerExpiresAt'] ?? '').toString();
 
     return OrderModel(
       id: id,
@@ -163,9 +256,20 @@ class OrderModel {
       status: OrderStatus.fromString(rawStatus),
       createdAt: createdAt,
       notes: json['notes'] as String? ?? json['customer_note'] as String?,
-      distanceKm: json['distanceKm'] != null
-          ? (json['distanceKm'] as num).toDouble()
-          : null,
+      distanceKm: asDouble(json['distanceKm'] ?? json['distance_km']),
+      vendorName: vendorName,
+      pickupAddress: pickupAddress,
+      pickupLat: pickupLat,
+      pickupLng: pickupLng,
+      paymentMethod: paymentMethod,
+      isCod: isCod,
+      amountDue: amountDue,
+      riderEarning: asDouble(
+          json['rider_earning'] ?? json['rider_fee'] ?? json['riderEarning']),
+      otpRequired: asBool(json['delivery_otp_required'] ??
+          json['requires_delivery_otp'] ??
+          json['otp_required']),
+      offerExpiresAt: DateTime.tryParse(expiresRaw),
     );
   }
 
@@ -184,6 +288,15 @@ class OrderModel {
         'createdAt': createdAt.toIso8601String(),
         'notes': notes,
         'distanceKm': distanceKm,
+        'vendorName': vendorName,
+        'pickupAddress': pickupAddress,
+        'pickupLat': pickupLat,
+        'pickupLng': pickupLng,
+        'paymentMethod': paymentMethod,
+        'amount_due': amountDue,
+        'riderEarning': riderEarning,
+        'otp_required': otpRequired,
+        'offerExpiresAt': offerExpiresAt?.toIso8601String(),
       };
 
   OrderModel copyWith({OrderStatus? status}) => OrderModel(
@@ -201,5 +314,15 @@ class OrderModel {
         createdAt: createdAt,
         notes: notes,
         distanceKm: distanceKm,
+        vendorName: vendorName,
+        pickupAddress: pickupAddress,
+        pickupLat: pickupLat,
+        pickupLng: pickupLng,
+        paymentMethod: paymentMethod,
+        isCod: isCod,
+        amountDue: amountDue,
+        riderEarning: riderEarning,
+        otpRequired: otpRequired,
+        offerExpiresAt: offerExpiresAt,
       );
 }
