@@ -12,6 +12,7 @@ import '../../core/services/notification_watcher_service.dart';
 import '../../data/providers/auth_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/earnings_provider.dart';
+import '../../data/providers/cash_provider.dart';
 import '../../data/providers/support_provider.dart';
 
 class ProfileScreen extends ConsumerWidget {
@@ -307,6 +308,7 @@ class ProfileScreen extends ConsumerWidget {
                           // order/earnings state too, not just auth.
                           ref.read(orderProvider.notifier).reset();
                           ref.read(earningsProvider.notifier).reset();
+                          ref.read(cashProvider.notifier).reset();
                           ref.read(supportProvider.notifier).reset();
                           await ref.read(authProvider.notifier).logout();
 

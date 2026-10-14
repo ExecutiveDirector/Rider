@@ -2,7 +2,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:fl_chart/fl_chart.dart';
+import '../../core/config/routes.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/json_utils.dart';
+import '../../data/providers/cash_provider.dart';
 import '../../data/providers/earnings_provider.dart';
 import '../../data/models/earnings_model.dart';
 import 'package:intl/intl.dart';
@@ -24,6 +27,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       ref.read(earningsProvider.notifier).fetchSummary();
       ref.read(earningsProvider.notifier).fetchEarnings('week');
+      ref.read(cashProvider.notifier).load();
     });
   }
 
@@ -57,6 +61,7 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
   Widget build(BuildContext context) {
     final state = ref.watch(earningsProvider);
     final summary = state.summary;
+    final cashSummary = ref.watch(cashProvider).summary;
 
     return Scaffold(
       backgroundColor: AppColors.background,
@@ -190,6 +195,19 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                       ),
                     ),
                   ],
+                ),
+              ),
+            ),
+
+            // Cash in hand + payouts
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 0),
+                child: _CashTile(
+                  cashInHand: cashSummary?.cashInHand,
+                  nearLimit: cashSummary?.nearLimit ?? false,
+                  onTap: () =>
+                      Navigator.pushNamed(context, AppRoutes.cashPayouts),
                 ),
               ),
             ),
@@ -358,6 +376,34 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
                   ),
                 ),
               )
+            else if (state.error != null && state.earnings.isEmpty)
+              SliverToBoxAdapter(
+                child: Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(32),
+                    child: Column(
+                      children: [
+                        const Icon(Icons.error_outline_rounded,
+                            color: AppColors.error, size: 32),
+                        const SizedBox(height: 8),
+                        Text(
+                          state.error!,
+                          textAlign: TextAlign.center,
+                          style:
+                              const TextStyle(color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton(
+                          onPressed: () => ref
+                              .read(earningsProvider.notifier)
+                              .fetchEarnings(_periods[_selectedPeriod]),
+                          child: const Text('Retry'),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              )
             else if (state.earnings.isEmpty)
               const SliverToBoxAdapter(
                 child: Center(
@@ -480,7 +526,7 @@ class _EarningsItem extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Order #${earning.orderId.substring(0, 8).toUpperCase()}',
+                  'Order #${shortId(earning.orderId).toUpperCase()}',
                   style: const TextStyle(
                     fontWeight: FontWeight.w600,
                     fontSize: 14,
@@ -528,6 +574,75 @@ class _EarningsItem extends StatelessWidget {
             ],
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _CashTile extends StatelessWidget {
+  final double? cashInHand;
+  final bool nearLimit;
+  final VoidCallback onTap;
+  const _CashTile({
+    required this.cashInHand,
+    required this.nearLimit,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final color = nearLimit ? AppColors.warning : AppColors.primary;
+    return InkWell(
+      borderRadius: BorderRadius.circular(14),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: nearLimit ? color : AppColors.divider),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.payments_outlined, color: color, size: 20),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Cash & payouts',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  Text(
+                    cashInHand == null
+                        ? 'Remit cash, withdraw earnings'
+                        : 'Cash in hand: KES ${cashInHand!.toStringAsFixed(0)}'
+                            '${nearLimit ? ' · near limit' : ''}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight:
+                          nearLimit ? FontWeight.w700 : FontWeight.w500,
+                      color: nearLimit ? color : AppColors.textSecondary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: AppColors.textHint),
+          ],
+        ),
       ),
     );
   }

@@ -111,12 +111,22 @@ class SocketService {
     _emit(SocketConstants.driverOnline, {'driverId': driverId});
   }
 
-  void sendLocation(double lat, double lng, {String? orderId}) {
+  void sendLocation(
+    double lat,
+    double lng, {
+    String? orderId,
+    double? heading,
+    double? speed,
+    double? accuracy,
+  }) {
     _emit(SocketConstants.locationUpdate, {
       'driverId': _driverId,
       'lat': lat,
       'lng': lng,
       'orderId': orderId,
+      if (heading != null) 'heading': heading,
+      if (speed != null) 'speed': speed,
+      if (accuracy != null) 'accuracy': accuracy,
       'timestamp': DateTime.now().toIso8601String(),
     });
   }

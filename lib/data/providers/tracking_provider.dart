@@ -7,62 +7,81 @@ import '../../core/services/location_service.dart';
 
 class TrackingState {
   final LatLng? currentPosition;
-  final List<LatLng> routePoints;
+  final double? heading;
+  final double? speedMps;
   final bool isTracking;
   final String? activeOrderId;
 
   const TrackingState({
     this.currentPosition,
-    this.routePoints = const [],
+    this.heading,
+    this.speedMps,
     this.isTracking = false,
     this.activeOrderId,
   });
-
-  TrackingState copyWith({
-    LatLng? currentPosition,
-    List<LatLng>? routePoints,
-    bool? isTracking,
-    String? activeOrderId,
-  }) {
-    return TrackingState(
-      currentPosition: currentPosition ?? this.currentPosition,
-      routePoints: routePoints ?? this.routePoints,
-      isTracking: isTracking ?? this.isTracking,
-      activeOrderId: activeOrderId ?? this.activeOrderId,
-    );
-  }
 }
 
+/// UI-side view of [LocationService].
+///
+/// The service itself keeps running for as long as the rider is online (it is
+/// started/stopped by the online toggle). This notifier only attaches a map
+/// screen to it: [startTracking] tags the stream with the order being
+/// delivered and subscribes for display; [stopTracking] detaches again
+/// WITHOUT stopping the service, so leaving the map no longer takes the rider
+/// off dispatch's radar.
 class TrackingNotifier extends StateNotifier<TrackingState> {
   StreamSubscription<Position>? _locationSub;
 
   TrackingNotifier() : super(const TrackingState());
 
   Future<void> startTracking(String orderId) async {
-    state = state.copyWith(isTracking: true, activeOrderId: orderId);
+    // Re-seed from the last known fix so the map doesn't open on a blank
+    // default position while waiting for the next GPS event.
+    final last = LocationService.instance.lastPosition;
+    state = TrackingState(
+      currentPosition:
+          last == null ? null : LatLng(last.latitude, last.longitude),
+      heading: last?.heading,
+      speedMps: last?.speed,
+      isTracking: true,
+      activeOrderId: orderId,
+    );
+
+    // Starts the service if it isn't running yet (e.g. permissions were
+    // granted late); otherwise only updates the order tag.
     await LocationService.instance.startTracking(activeOrderId: orderId);
 
-    _locationSub = LocationService.instance.onLocationUpdate.listen((position) {
-      final latLng = LatLng(position.latitude, position.longitude);
-      final updatedRoute = [...state.routePoints, latLng];
-      state = state.copyWith(
-        currentPosition: latLng,
-        routePoints: updatedRoute,
+    // Subscribe exactly once, however many times a screen re-attaches.
+    await _locationSub?.cancel();
+    _locationSub =
+        LocationService.instance.onLocationUpdate.listen((position) {
+      state = TrackingState(
+        currentPosition: LatLng(position.latitude, position.longitude),
+        heading: position.heading,
+        speedMps: position.speed,
+        isTracking: true,
+        activeOrderId: state.activeOrderId,
       );
     });
   }
 
+  /// Detach the map from the location stream. Does not stop the service.
   void stopTracking() {
-    LocationService.instance.stopTracking();
     _locationSub?.cancel();
-    state = const TrackingState();
+    _locationSub = null;
+    LocationService.instance.setActiveOrder(null);
+    state = TrackingState(currentPosition: state.currentPosition);
   }
 
   Future<void> fetchCurrentLocation() async {
     final position = await LocationService.instance.getCurrentPosition();
     if (position != null) {
-      state = state.copyWith(
+      state = TrackingState(
         currentPosition: LatLng(position.latitude, position.longitude),
+        heading: position.heading,
+        speedMps: position.speed,
+        isTracking: state.isTracking,
+        activeOrderId: state.activeOrderId,
       );
     }
   }

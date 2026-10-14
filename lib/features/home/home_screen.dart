@@ -49,22 +49,61 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     super.dispose();
   }
 
-  void _onToggleOnline() async {
+  Future<void> _onToggleOnline() async {
     final driver = ref.read(authProvider).driver;
     if (driver == null) return;
 
-    final isCurrentlyOnline = driver.isOnline;
-    ref.read(authProvider.notifier).toggleOnlineStatus();
-
-    if (!isCurrentlyOnline) {
-      final hasPermission = await LocationService.instance.requestPermissions();
-      if (hasPermission) {
-        SocketService.instance.connect();
-        SocketService.instance.registerDriver(driver.id);
+    if (driver.isOnline) {
+      final hasActive = ref.read(orderProvider).activeOrders.isNotEmpty;
+      if (hasActive) {
+        final ok = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text('Go offline?'),
+            content: const Text(
+              'You still have active orders. You will stop receiving new '
+              'orders, but your location keeps sharing until they are done.',
+            ),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(ctx, false),
+                  child: const Text('Stay online')),
+              FilledButton(
+                  onPressed: () => Navigator.pop(ctx, true),
+                  child: const Text('Go offline')),
+            ],
+          ),
+        );
+        if (ok != true || !mounted) return;
       }
-    } else {
+
+      ref.read(authProvider.notifier).toggleOnlineStatus();
       SocketService.instance.disconnect();
+      // Keep sharing location while a delivery is still in progress; the
+      // listener in build() stops it once the last order is completed.
+      if (!hasActive) LocationService.instance.stopTracking();
+      return;
     }
+
+    // Going online needs location. Ask first — previously the rider was
+    // flipped to "online" even when permission was refused, leaving them
+    // visible-but-untracked.
+    final hasPermission = await LocationService.instance.requestPermissions();
+    if (!mounted) return;
+    if (!hasPermission) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Turn on location access to go online.'),
+        behavior: SnackBarBehavior.floating,
+      ));
+      return;
+    }
+
+    ref.read(authProvider.notifier).toggleOnlineStatus();
+    SocketService.instance.connect();
+    SocketService.instance.registerDriver(driver.id);
+    // Stays on for the whole shift — not just while the map is open — so
+    // dispatch can auto-assign by proximity and customers see the rider.
+    await LocationService.instance.startTracking();
   }
 
   @override
@@ -73,6 +112,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final orderState = ref.watch(orderProvider);
     final driver = auth.driver;
     final isOnline = driver?.isOnline ?? false;
+
+    // Offline riders still finish what they started: once the last active
+    // order is done, stop sharing location.
+    ref.listen<int>(orderProvider.select((s) => s.activeOrders.length),
+        (prev, next) {
+      final online = ref.read(authProvider).driver?.isOnline ?? false;
+      if (!online && next == 0) LocationService.instance.stopTracking();
+    });
 
     // NOTE: the incoming-order sheet listener now lives in app.dart at the
     // root of the widget tree, so it fires regardless of which screen is
@@ -282,7 +329,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  if (!isOnline)
+                  if (!isOnline && orderState.activeOrders.isEmpty)
                     AppEmptyState(
                       icon: Icons.wifi_tethering_off_rounded,
                       title: "You're offline",

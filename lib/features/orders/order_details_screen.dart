@@ -1,8 +1,8 @@
 // lib/features/orders/order_details_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:url_launcher/url_launcher.dart';
 import '../../core/constants/app_colors.dart';
+import '../../core/utils/navigation_launcher.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../core/config/routes.dart';
 import '../../data/providers/order_provider.dart';
@@ -31,70 +31,67 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     return null;
   }
 
+  void _toast(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      backgroundColor: error ? AppColors.error : null,
+    ));
+  }
+
   Future<void> _callCustomer(String phone) async {
-    // FIX: guard against empty phone number
-    if (phone.isEmpty) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Phone number not available')),
-        );
-      }
-      return;
-    }
-    final uri = Uri.parse('tel:$phone');
-    if (await canLaunchUrl(uri)) {
-      launchUrl(uri);
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not open phone dialler')),
-        );
-      }
+    if (phone.isEmpty) return _toast('Phone number not available');
+    if (!await launchPhoneCall(phone)) _toast('Could not open phone dialler');
+  }
+
+  Future<void> _navigate(double lat, double lng) async {
+    if (!await launchNavigation(lat, lng)) {
+      _toast('Could not open a maps app', error: true);
     }
   }
 
-  Future<void> _openMaps(double lat, double lng) async {
-    final uri = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-    );
-    if (await canLaunchUrl(uri)) launchUrl(uri);
-  }
-
-  Future<void> _deliverOrder(String orderId) async {
+  Future<void> _confirmPickup(String orderId) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Complete Delivery?'),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Confirm pickup'),
         content: const Text(
-          'Confirm the gas cylinder has been delivered to the customer.',
+          'Confirm you have collected the gas cylinder from the vendor.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context, false),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Cancel'),
           ),
           ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
+            onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Confirm'),
           ),
         ],
       ),
     );
-
-    if (confirmed != true) return;
+    if (confirmed != true || !mounted) return;
 
     setState(() => _isCompleting = true);
-    final success =
-        await ref.read(orderProvider.notifier).deliverOrder(orderId);
+    final ok = await ref.read(orderProvider.notifier).pickupOrder(orderId);
+    if (!mounted) return;
     setState(() => _isCompleting = false);
+    if (!ok) {
+      _toast(ref.read(orderProvider).error ?? 'Failed to update order.',
+          error: true);
+    }
+  }
 
-    if (success && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('🎉 Delivery completed!'),
-          backgroundColor: AppColors.success,
-        ),
-      );
+  /// Delivery is completed on its own screen, where the rider enters the
+  /// customer's code, takes a photo and records cash / empty cylinders.
+  Future<void> _deliverOrder(String orderId) async {
+    final done = await Navigator.pushNamed<bool>(
+      context,
+      AppRoutes.proofOfDelivery,
+      arguments: orderId,
+    );
+    if (done == true && mounted) {
+      _toast('🎉 Delivery completed!');
       Navigator.pop(context);
     }
   }
@@ -157,13 +154,37 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
               ],
             ),
             const SizedBox(height: 16),
+            if (order.vendorName != null ||
+                order.pickupAddress != null ||
+                order.hasPickupLocation) ...[
+              _SectionCard(
+                title: 'Pickup',
+                trailing: TextButton.icon(
+                  icon: const Icon(Icons.navigation_outlined, size: 16),
+                  label: const Text('Navigate'),
+                  onPressed: order.hasPickupLocation
+                      ? () => _navigate(order.pickupLat!, order.pickupLng!)
+                      : null,
+                ),
+                children: [
+                  if (order.vendorName != null)
+                    _DetailRow(Icons.storefront_outlined, 'Vendor',
+                        order.vendorName!),
+                  if (order.pickupAddress != null)
+                    _DetailRow(Icons.location_on_outlined, 'Address',
+                        order.pickupAddress!),
+                ],
+              ),
+              const SizedBox(height: 16),
+            ],
             _SectionCard(
               title: 'Delivery',
               trailing: TextButton.icon(
                 icon: const Icon(Icons.navigation_outlined, size: 16),
                 label: const Text('Navigate'),
-                onPressed: () =>
-                    _openMaps(order.deliveryLat, order.deliveryLng),
+                onPressed: order.hasDeliveryLocation
+                    ? () => _navigate(order.deliveryLat, order.deliveryLng)
+                    : null,
               ),
               children: [
                 _DetailRow(Icons.location_on_outlined, 'Address',
@@ -185,6 +206,18 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                     Icons.scale_outlined, 'Quantity', '${order.quantity} kg'),
                 _DetailRow(Icons.attach_money_outlined, 'Total',
                     'KES ${order.totalAmount.toStringAsFixed(0)}'),
+                if (order.riderEarning != null)
+                  _DetailRow(Icons.account_balance_wallet_outlined,
+                      'You earn', 'KES ${order.riderEarning!.toStringAsFixed(0)}'),
+                _DetailRow(
+                  Icons.payments_outlined,
+                  'Payment',
+                  order.isCod
+                      ? 'Cash on delivery — collect KES ${order.amountDue.toStringAsFixed(0)}'
+                      : (order.paymentMethod.isEmpty
+                          ? 'Not specified'
+                          : 'Prepaid (${order.paymentMethod})'),
+                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -202,9 +235,17 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              // Only show "Complete" once the rider has actually accepted
-              if (order.status == OrderStatus.accepted ||
-                  order.status == OrderStatus.inTransit)
+              // Pickup comes first; the delivery can only be completed once
+              // the cylinder is actually on the bike.
+              if (order.status == OrderStatus.accepted)
+                GradientButton(
+                  icon: Icons.inventory_2_outlined,
+                  label: 'Confirm Pickup',
+                  loading: _isCompleting,
+                  onPressed:
+                      _isCompleting ? null : () => _confirmPickup(order.id),
+                )
+              else if (order.status == OrderStatus.inTransit)
                 GradientButton(
                   icon: Icons.check_circle_outline,
                   label: 'Complete Delivery',

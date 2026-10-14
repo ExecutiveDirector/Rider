@@ -8,8 +8,10 @@ import '../../features/home/home_screen.dart';
 import '../../features/orders/active_orders_screen.dart';
 import '../../features/orders/order_details_screen.dart';
 import '../../features/orders/completed_orders_screen.dart';
+import '../../features/orders/proof_of_delivery_screen.dart';
 import '../../features/tracking/live_tracking_screen.dart';
 import '../../features/earnings/earnings_screen.dart';
+import '../../features/earnings/cash_payouts_screen.dart';
 import '../../features/profile/profile_screen.dart';
 import '../../features/notifications/notifications_screen.dart';
 import '../../features/settings/settings_screen.dart';
@@ -31,8 +33,10 @@ class AppRoutes {
   static const String activeOrders = '/orders/active';
   static const String orderDetails = '/orders/details';
   static const String completedOrders = '/orders/completed';
+  static const String proofOfDelivery = '/orders/proof';
   static const String liveTracking = '/tracking/live';
   static const String earnings = '/earnings';
+  static const String cashPayouts = '/earnings/cash';
   static const String profile = '/profile';
   static const String notifications = '/notifications';
   static const String settings = '/settings';
@@ -53,6 +57,7 @@ class AppRoutes {
         activeOrders: (_) => const ActiveOrdersScreen(),
         completedOrders: (_) => const CompletedOrdersScreen(),
         earnings: (_) => const EarningsScreen(),
+        cashPayouts: (_) => const CashPayoutsScreen(),
         profile: (_) => const ProfileScreen(),
         notifications: (_) => const NotificationsScreen(),
         settings: (_) => const SettingsScreen(),
@@ -70,6 +75,11 @@ class AppRoutes {
         final orderId = settings.arguments as String;
         return MaterialPageRoute(
           builder: (_) => OrderDetailsScreen(orderId: orderId),
+        );
+      case proofOfDelivery:
+        final orderId = settings.arguments as String;
+        return MaterialPageRoute<bool>(
+          builder: (_) => ProofOfDeliveryScreen(orderId: orderId),
         );
       case liveTracking:
         final orderId = settings.arguments as String;

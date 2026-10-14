@@ -1,4 +1,5 @@
 // lib/data/models/earnings_model.dart
+import '../../core/utils/json_utils.dart';
 
 class EarningsModel {
   final String id;
@@ -23,11 +24,14 @@ class EarningsModel {
     return EarningsModel(
       id: json['id']?.toString() ?? '',
       orderId: json['orderId']?.toString() ?? json['order_id']?.toString() ?? '',
-      amount: (json['amount'] ?? 0).toDouble(),
-      commission: (json['commission'] ?? 0).toDouble(),
-      netAmount: (json['netAmount'] ?? json['net_amount'] ?? 0).toDouble(),
-      date: DateTime.tryParse(json['date'] ?? json['createdAt'] ?? '') ?? DateTime.now(),
-      status: json['status'] ?? 'pending',
+      amount: asDoubleOr(json['amount']),
+      commission: asDoubleOr(json['commission']),
+      netAmount: asDoubleOr(json['netAmount'] ?? json['net_amount']),
+      date: DateTime.tryParse(
+              (json['date'] ?? json['createdAt'] ?? json['created_at'] ?? '')
+                  .toString()) ??
+          DateTime.now(),
+      status: (json['status'] ?? 'pending').toString(),
     );
   }
 }
@@ -53,13 +57,17 @@ class EarningsSummary {
 
   factory EarningsSummary.fromJson(Map<String, dynamic> json) {
     return EarningsSummary(
-      today: (json['today'] ?? 0).toDouble(),
-      thisWeek: (json['thisWeek'] ?? json['this_week'] ?? 0).toDouble(),
-      thisMonth: (json['thisMonth'] ?? json['this_month'] ?? 0).toDouble(),
-      totalDeliveriesToday: json['totalDeliveriesToday'] ?? json['total_deliveries_today'] ?? 0,
-      totalDeliveriesWeek: json['totalDeliveriesWeek'] ?? json['total_deliveries_week'] ?? 0,
-      totalDeliveriesMonth: json['totalDeliveriesMonth'] ?? json['total_deliveries_month'] ?? 0,
-      pendingPayout: (json['pendingPayout'] ?? json['pending_payout'] ?? 0).toDouble(),
+      today: asDoubleOr(json['today']),
+      thisWeek: asDoubleOr(json['thisWeek'] ?? json['this_week']),
+      thisMonth: asDoubleOr(json['thisMonth'] ?? json['this_month']),
+      totalDeliveriesToday: asIntOr(
+          json['totalDeliveriesToday'] ?? json['total_deliveries_today']),
+      totalDeliveriesWeek: asIntOr(
+          json['totalDeliveriesWeek'] ?? json['total_deliveries_week']),
+      totalDeliveriesMonth: asIntOr(
+          json['totalDeliveriesMonth'] ?? json['total_deliveries_month']),
+      pendingPayout:
+          asDoubleOr(json['pendingPayout'] ?? json['pending_payout']),
     );
   }
 

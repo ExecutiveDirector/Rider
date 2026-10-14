@@ -35,6 +35,12 @@ class ApiConstants {
   static const String earnings = '/riders/earnings';
   static const String earningsSummary = '/riders/earnings/summary';
 
+  // Cash on delivery + payouts
+  static const String cashSummary = '/riders/cash';
+  static const String cashRemit = '/riders/cash/remit';
+  static const String payouts = '/riders/payouts';
+  static const String payoutRequest = '/riders/payouts/request';
+
   // Profile
   static const String profile = '/riders/profile';
   static const String updateProfile = '/riders/profile';

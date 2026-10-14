@@ -3,12 +3,35 @@ import 'package:dio/dio.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import '../constants/api_constants.dart';
 
+/// One turn-by-turn instruction from the Directions API.
+class RouteStep {
+  /// Plain-text instruction, e.g. "Turn left onto Mombasa Rd".
+  final String instruction;
+
+  /// Length of this step, e.g. "350 m".
+  final String distanceText;
+
+  /// Google maneuver id ("turn-left", "roundabout-right", ...), if any.
+  final String? maneuver;
+
+  /// Where this step ends — reaching it means the maneuver is done.
+  final LatLng end;
+
+  const RouteStep({
+    required this.instruction,
+    required this.distanceText,
+    required this.end,
+    this.maneuver,
+  });
+}
+
 class DirectionsResult {
   final List<LatLng> polylinePoints;
   final String distanceText;
   final String durationText;
   final double distanceKm;
   final int durationMinutes;
+  final List<RouteStep> steps;
 
   const DirectionsResult({
     required this.polylinePoints,
@@ -16,6 +39,7 @@ class DirectionsResult {
     required this.durationText,
     required this.distanceKm,
     required this.durationMinutes,
+    this.steps = const [],
   });
 }
 
@@ -50,6 +74,7 @@ class DirectionsService {
         'origin': '${origin.latitude},${origin.longitude}',
         'destination': '${destination.latitude},${destination.longitude}',
         'mode': 'driving',
+        'region': 'ke',
         'key': ApiConstants.directionsApiKey,
       });
 
@@ -67,17 +92,47 @@ class DirectionsService {
       final overviewPolyline = (route['overview_polyline']
           as Map<String, dynamic>)['points'] as String;
 
+      final steps = <RouteStep>[];
+      for (final raw in (leg['steps'] as List? ?? [])) {
+        final m = raw as Map<String, dynamic>;
+        final end = m['end_location'] as Map<String, dynamic>;
+        steps.add(RouteStep(
+          instruction: _stripHtml(m['html_instructions'] as String? ?? ''),
+          distanceText:
+              (m['distance'] as Map<String, dynamic>?)?['text'] as String? ??
+                  '',
+          maneuver: m['maneuver'] as String?,
+          end: LatLng(
+            (end['lat'] as num).toDouble(),
+            (end['lng'] as num).toDouble(),
+          ),
+        ));
+      }
+
       return DirectionsResult(
         polylinePoints: _decodePolyline(overviewPolyline),
         distanceText: leg['distance']['text'] as String,
         durationText: leg['duration']['text'] as String,
         distanceKm: (leg['distance']['value'] as num) / 1000.0,
         durationMinutes: ((leg['duration']['value'] as num) / 60).round(),
+        steps: steps,
       );
     } catch (_) {
       // Network hiccup, quota error, malformed response, etc. — fail soft.
       return null;
     }
+  }
+
+  /// Directions returns instructions as HTML ("Turn <b>left</b> onto ...",
+  /// optionally followed by a <div> with extra context). Reduce to plain text.
+  String _stripHtml(String html) {
+    return html
+        .replaceAll(RegExp(r'<div[^>]*>.*?</div>', dotAll: true), '')
+        .replaceAll(RegExp(r'<[^>]+>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
   }
 
   /// Standard Google encoded-polyline decoding algorithm.
