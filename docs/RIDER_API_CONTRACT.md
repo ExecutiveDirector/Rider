@@ -62,3 +62,10 @@ After 3 consecutive failures the app pauses these posts for 10 minutes.
 `instructions` is free text ("Paybill 123456, account = your rider ID").
 `GET /riders/earnings/summary` must provide `pendingPayout` — it is the
 "available to withdraw" figure.
+
+## Order status seen by the rider app
+Rider endpoints return a rider-facing `status` / `order_status`:
+`pending` (an unanswered offer) → `accepted` → `in_transit` (cylinder collected) → `delivered`, or `cancelled`.
+The raw database value is in `db_status`. `POST /riders/orders/:id/pickup` moves the order to `in_transit`;
+`deliver` requires `in_transit`. Accepting does not change the vendor-side status.
+Build-time option: `--dart-define=SUPPORT_PHONE=+254...` enables "Call AquaGas support" in the safety sheet.

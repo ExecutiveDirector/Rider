@@ -6,6 +6,8 @@ import '../../../core/constants/app_colors.dart';
 import '../../../core/widgets/gradient_button.dart';
 import '../../../core/config/routes.dart';
 import '../../../core/services/order_alert_sound_service.dart';
+import '../../../core/services/location_service.dart';
+import '../../../core/utils/geo_utils.dart';
 import '../../../core/widgets/cancel_reason_dialog.dart';
 import '../../../data/models/order_model.dart';
 import '../../../data/providers/order_provider.dart';
@@ -158,6 +160,29 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
     super.dispose();
   }
 
+  /// "2.4 km to pickup · ~9 min" (rider -> pickup), plus pickup -> customer
+  /// when both are known. Straight-line estimates; null without a GPS fix.
+  String? _awayLabel(OrderModel order) {
+    final me = LocationService.instance.lastPosition;
+    if (me == null) return null;
+    final parts = <String>[];
+    if (order.hasPickupLocation) {
+      final d = haversineMeters(
+          me.latitude, me.longitude, order.pickupLat!, order.pickupLng!);
+      parts.add('${formatDistance(d)} to pickup · ~${roughMinutes(d)} min');
+      if (order.hasDeliveryLocation) {
+        final t = haversineMeters(order.pickupLat!, order.pickupLng!,
+            order.deliveryLat, order.deliveryLng);
+        parts.add('${formatDistance(t)} trip');
+      }
+    } else if (order.hasDeliveryLocation) {
+      final d = haversineMeters(
+          me.latitude, me.longitude, order.deliveryLat, order.deliveryLng);
+      parts.add('${formatDistance(d)} to customer · ~${roughMinutes(d)} min');
+    }
+    return parts.isEmpty ? null : parts.join('  ·  ');
+  }
+
   @override
   Widget build(BuildContext context) {
     // Close if the offer is withdrawn while the sheet is open.
@@ -284,6 +309,14 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
                 const Divider(),
                 const SizedBox(height: 16),
 
+                if (_awayLabel(order) != null) ...[
+                  _InfoRow(
+                    icon: Icons.near_me_outlined,
+                    label: 'Away',
+                    value: _awayLabel(order)!,
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 if (pickupLine.isNotEmpty) ...[
                   _InfoRow(
                     icon: Icons.storefront_outlined,
