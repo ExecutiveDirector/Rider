@@ -15,6 +15,8 @@ import '../../data/providers/auth_provider.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/providers/earnings_provider.dart';
 import '../../data/models/order_model.dart';
+import '../../core/services/shift_service.dart';
+import 'widgets/goal_card.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -37,6 +39,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
       ref.read(orderProvider.notifier).fetchActiveOrders();
       ref.read(earningsProvider.notifier).fetchSummary();
+      // Resumed mid-shift (app restarted while online): keep the timer honest.
+      if (ref.read(authProvider).driver?.isOnline ?? false) {
+        ShiftService.instance.markOnline();
+      }
     });
     _refreshTimer = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) ref.read(orderProvider.notifier).fetchActiveOrders();
@@ -78,6 +84,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       }
 
       ref.read(authProvider.notifier).toggleOnlineStatus();
+      ShiftService.instance.markOffline();
       SocketService.instance.disconnect();
       // Keep sharing location while a delivery is still in progress; the
       // listener in build() stops it once the last order is completed.
@@ -99,6 +106,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     }
 
     ref.read(authProvider.notifier).toggleOnlineStatus();
+    ShiftService.instance.markOnline();
     SocketService.instance.connect();
     SocketService.instance.registerDriver(driver.id);
     // Stays on for the whole shift — not just while the map is open — so
@@ -308,6 +316,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       ),
                     ),
                   _StatsRow(),
+                  const SizedBox(height: 12),
+                  const GoalCard(),
                   const SizedBox(height: 24),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,

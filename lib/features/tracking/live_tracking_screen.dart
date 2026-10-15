@@ -1,4 +1,5 @@
 // lib/features/tracking/live_tracking_screen.dart
+import 'safety_sheet.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -359,6 +360,23 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                     : _completeDelivery(order),
               ),
             ),
+
+          // Safety / help
+          Positioned(
+            right: 16,
+            bottom: order != null ? 352 : 152,
+            child: FloatingActionButton.small(
+              heroTag: 'safety_fab',
+              onPressed: () => showSafetySheet(
+                context,
+                lat: tracking.currentPosition?.latitude,
+                lng: tracking.currentPosition?.longitude,
+                orderNumber: order?.orderNumber,
+              ),
+              backgroundColor: Colors.white,
+              child: const Icon(Icons.shield_outlined, color: AppColors.error),
+            ),
+          ),
 
           // Recenter button
           Positioned(

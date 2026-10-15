@@ -11,6 +11,7 @@ import '../../core/widgets/gradient_button.dart';
 import '../../data/models/delivery_proof.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
+import 'trip_summary_screen.dart';
 
 /// Completes a delivery with proof: customer code, a drop-off photo, the
 /// cylinder swap and — for cash-on-delivery orders — the cash collected.
@@ -170,6 +171,18 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
       });
       return;
     }
+    // Celebrate + show earnings and goal progress, then hand control back.
+    await Navigator.push(
+      context,
+      MaterialPageRoute<void>(
+        builder: (_) => TripSummaryScreen(
+          orderNumber: order.orderNumber,
+          earning: order.riderEarning,
+          cashToRemit: cash ?? 0,
+        ),
+      ),
+    );
+    if (!mounted) return;
     Navigator.pop(context, true);
   }
 
