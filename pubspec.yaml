@@ -38,7 +38,7 @@ dependencies:
   flutter_secure_storage: ^9.0.0
 
   # Notifications
-  flutter_local_notifications: ^17.0.0
+  flutter_local_notifications: ^17.2.0
 
   # Audio — looping alert tone for the incoming-order accept/reject sheet
   audioplayers: ^6.1.0

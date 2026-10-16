@@ -1,6 +1,7 @@
 // lib/core/services/notification_service.dart
 import 'dart:async';
 import 'dart:io';
+import 'dart:ui';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter/foundation.dart';
@@ -9,9 +10,83 @@ import 'provider_container.dart';
 import 'api_service.dart';
 import '../constants/api_constants.dart';
 
+const _kNewOrderChannelId = 'new_order_channel';
+
+const _newOrderChannel = AndroidNotificationChannel(
+  _kNewOrderChannelId,
+  'New Orders',
+  description: 'Alerts for incoming delivery orders',
+  importance: Importance.max,
+  enableVibration: true,
+  playSound: true,
+);
+
+/// Raises the loud, full-screen "new order" alert. Used by both the foreground
+/// handler and the background isolate, so it takes the plugin as an argument.
+Future<void> _showOfferAlert(
+  FlutterLocalNotificationsPlugin plugin, {
+  required String title,
+  required String body,
+  String? orderId,
+}) async {
+  await plugin.show(
+    // Stable id per order so a re-offer replaces rather than stacks.
+    orderId != null
+        ? (int.tryParse(orderId) ?? orderId.hashCode) & 0x7fffffff
+        : DateTime.now().millisecondsSinceEpoch ~/ 1000,
+    title,
+    body,
+    NotificationDetails(
+      android: AndroidNotificationDetails(
+        _kNewOrderChannelId,
+        'New Orders',
+        importance: Importance.max,
+        priority: Priority.max,
+        fullScreenIntent: true,
+        category: AndroidNotificationCategory.call,
+        visibility: NotificationVisibility.public,
+        audioAttributesUsage: AudioAttributesUsage.alarm,
+        timeoutAfter: 45000, // offers expire; don't leave a stale alert
+        ticker: 'New delivery order',
+      ),
+      iOS: const DarwinNotificationDetails(
+        presentAlert: true,
+        presentBadge: true,
+        presentSound: true,
+        interruptionLevel: InterruptionLevel.timeSensitive,
+      ),
+    ),
+    payload: orderId,
+  );
+}
+
+/// Runs in its own isolate when a data-only push arrives while the app is in the
+/// background or killed (the backend sends job offers this way — see
+/// pushNotificationService.buildMessage). Without this the offer only
+/// appeared after the rider opened the app.
 @pragma('vm:entry-point')
 Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
+  DartPluginRegistrant.ensureInitialized();
   debugPrint('[FCM] Background message: ${message.messageId}');
+  final data = message.data;
+  // A message that carries a `notification` block is shown by the system.
+  if (message.notification != null || data['type'] != 'new_order') return;
+
+  final plugin = FlutterLocalNotificationsPlugin();
+  await plugin.initialize(const InitializationSettings(
+    android: AndroidInitializationSettings('@mipmap/ic_launcher'),
+    iOS: DarwinInitializationSettings(),
+  ));
+  await plugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.createNotificationChannel(_newOrderChannel);
+  await _showOfferAlert(
+    plugin,
+    title: data['title'] ?? 'New Delivery Order!',
+    body: data['body'] ?? 'You have a new delivery request',
+    orderId: data['orderId'],
+  );
 }
 
 class NotificationService {
@@ -27,7 +102,16 @@ class NotificationService {
   Stream<Map<String, String>> get onForegroundMessage =>
       _foregroundController.stream;
 
-  static const _newOrderChannelId = 'new_order_channel';
+  /// Offer the rider tapped while the app was closed. The UI isn't ready (and
+  /// the rider may not be signed in yet) at launch, so HomeScreen consumes it.
+  String? _pendingOfferId;
+  String? takePendingOffer() {
+    final id = _pendingOfferId;
+    _pendingOfferId = null;
+    return id;
+  }
+
+  static const _newOrderChannelId = _kNewOrderChannelId;
   static const _generalChannelId = 'general_channel';
 
   Future<void> init() async {
@@ -73,16 +157,9 @@ class NotificationService {
             .resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin>();
 
-        await androidImpl?.createNotificationChannel(
-          const AndroidNotificationChannel(
-            _newOrderChannelId,
-            'New Orders',
-            description: 'Alerts for incoming delivery orders',
-            importance: Importance.max,
-            enableVibration: true,
-            playSound: true,
-          ),
-        );
+        await androidImpl?.createNotificationChannel(_newOrderChannel);
+        // Android 14+: full-screen alerts need an explicit grant.
+        await androidImpl?.requestFullScreenIntentPermission();
 
         await androidImpl?.createNotificationChannel(
           const AndroidNotificationChannel(
@@ -107,6 +184,23 @@ class NotificationService {
     // sendPushNotificationToRider() on the backend always found zero
     // tokens no matter what. Register it now, and again whenever it
     // rotates (FCM tokens can change).
+    // App launched by tapping an offer while it was terminated.
+    try {
+      final initial = await _fcm.getInitialMessage();
+      if (initial?.data['type'] == 'new_order') {
+        _pendingOfferId = initial!.data['orderId'];
+      }
+      final launch = await _localNotifications.getNotificationAppLaunchDetails();
+      final payload = launch?.notificationResponse?.payload;
+      if (launch?.didNotificationLaunchApp == true &&
+          payload != null &&
+          payload.isNotEmpty) {
+        _pendingOfferId = payload;
+      }
+    } catch (e) {
+      debugPrint('[Notifications] Launch details failed (non-fatal): $e');
+    }
+
     final token = await _fcm.getToken();
     debugPrint('[Notifications] FCM Token: $token');
     if (token != null) await _registerTokenWithBackend(token);
@@ -162,15 +256,17 @@ class NotificationService {
     // Emit to the in-app stream so NotificationsScreen can pick it up
     _foregroundController.add({
       'id': message.messageId ?? DateTime.now().millisecondsSinceEpoch.toString(),
-      'title': message.notification?.title ?? '',
-      'body': message.notification?.body ?? '',
+      'title': message.notification?.title ?? data['title'] ?? '',
+      'body': message.notification?.body ?? data['body'] ?? '',
       'type': type,
     });
 
     if (type == 'new_order') {
       showNewOrderNotification(
-        title: message.notification?.title ?? 'New Order!',
-        body: message.notification?.body ?? 'You have a new delivery request',
+        title: message.notification?.title ?? data['title'] ?? 'New Order!',
+        body: message.notification?.body ??
+            data['body'] ??
+            'You have a new delivery request',
         orderId: data['orderId'],
       );
       final orderId = data['orderId'];
@@ -209,31 +305,9 @@ class NotificationService {
     required String title,
     required String body,
     String? orderId,
-  }) async {
-    await _localNotifications.show(
-      DateTime.now().millisecondsSinceEpoch ~/ 1000,
-      title,
-      body,
-      NotificationDetails(
-        android: AndroidNotificationDetails(
-          _newOrderChannelId,
-          'New Orders',
-          importance: Importance.max,
-          priority: Priority.high,
-          fullScreenIntent: true,
-          category: AndroidNotificationCategory.call,
-          ticker: 'New delivery order',
-        ),
-        iOS: const DarwinNotificationDetails(
-          presentAlert: true,
-          presentBadge: true,
-          presentSound: true,
-          interruptionLevel: InterruptionLevel.timeSensitive,
-        ),
-      ),
-      payload: orderId,
-    );
-  }
+  }) =>
+      _showOfferAlert(_localNotifications,
+          title: title, body: body, orderId: orderId);
 
   Future<void> showGeneralNotification({
     required String title,
