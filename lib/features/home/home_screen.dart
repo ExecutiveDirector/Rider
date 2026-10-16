@@ -16,6 +16,7 @@ import '../../data/providers/order_provider.dart';
 import '../../data/providers/earnings_provider.dart';
 import '../../data/models/order_model.dart';
 import '../../core/services/shift_service.dart';
+import '../../core/services/notification_service.dart';
 import 'widgets/goal_card.dart';
 import 'widgets/quest_card.dart';
 import 'demand_map_screen.dart';
@@ -27,19 +28,22 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen>
+    with WidgetsBindingObserver {
   int _navIndex = 0;
   Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Load profile if not already in state (cold start / session restore)
       if (ref.read(authProvider).driver == null) {
         ref.read(authProvider.notifier).loadProfile();
       }
       ref.read(orderProvider.notifier).fetchActiveOrders();
+      _raisePendingOffer();
       ref.read(earningsProvider.notifier).fetchSummary();
       // Resumed mid-shift (app restarted while online): keep the timer honest.
       if (ref.read(authProvider).driver?.isOnline ?? false) {
@@ -51,8 +55,26 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
+  void _raisePendingOffer() {
+    final id = NotificationService.instance.takePendingOffer();
+    if (id != null) {
+      ref.read(orderProvider.notifier).showIncomingOrderById(id);
+    }
+  }
+
+  // Waking the phone from an offer alert resumes the app: pull the offer in
+  // immediately instead of waiting for the next 15s poll.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      ref.read(orderProvider.notifier).fetchActiveOrders();
+      _raisePendingOffer();
+    }
+  }
+
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _refreshTimer?.cancel();
     super.dispose();
   }
