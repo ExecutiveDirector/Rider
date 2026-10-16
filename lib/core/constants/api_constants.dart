@@ -30,6 +30,8 @@ class ApiConstants {
 
   // Tracking
   static const String updateLocation = '/riders/location';
+  static const String incentives = '/riders/incentives';
+  static const String demandZones = '/riders/demand-zones';
 
   // Earnings
   static const String earnings = '/riders/earnings';

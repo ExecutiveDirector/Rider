@@ -5,6 +5,7 @@ import '../../core/constants/app_colors.dart';
 import '../../core/services/shift_service.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../data/providers/earnings_provider.dart';
+import '../../data/providers/growth_provider.dart';
 
 /// Shown right after a delivery is confirmed. [earning] is null when the
 /// backend doesn't send a rider fee; [cashToRemit] is the COD cash collected.
@@ -30,6 +31,10 @@ class _TripSummaryScreenState extends ConsumerState<TripSummaryScreen> {
     // Refresh today's totals so the goal bar includes this trip.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) ref.read(earningsProvider.notifier).fetchSummary();
+    });
+    // The backend awards quest bonuses just after delivery; refresh once it has.
+    Future.delayed(const Duration(seconds: 2), () {
+      if (mounted) ref.invalidate(questProvider);
     });
   }
 

@@ -69,3 +69,7 @@ Rider endpoints return a rider-facing `status` / `order_status`:
 The raw database value is in `db_status`. `POST /riders/orders/:id/pickup` moves the order to `in_transit`;
 `deliver` requires `in_transit`. Accepting does not change the vendor-side status.
 Build-time option: `--dart-define=SUPPORT_PHONE=+254...` enables "Call AquaGas support" in the safety sheet.
+
+## Growth endpoints
+- `GET /riders/incentives` → `{ data: { deliveries_today, tiers:[{target,bonus,reached}], next:{target,bonus,remaining}|null, bonus_earned_today } }`
+- `GET /riders/demand-zones?hours=3` → `{ data: { window_hours, zones:[{latitude,longitude,count,intensity,radius_m}] } }`
