@@ -17,6 +17,8 @@ import '../../data/providers/earnings_provider.dart';
 import '../../data/models/order_model.dart';
 import '../../core/services/shift_service.dart';
 import 'widgets/goal_card.dart';
+import 'widgets/quest_card.dart';
+import 'demand_map_screen.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -318,7 +320,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   _StatsRow(),
                   const SizedBox(height: 12),
                   const GoalCard(),
-                  const SizedBox(height: 24),
+                  const QuestCard(),
+                  const SizedBox(height: 8),
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const DemandMapScreen()),
+                      ),
+                      icon: const Icon(Icons.local_fire_department_outlined,
+                          size: 18),
+                      label: const Text('See busy areas'),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
