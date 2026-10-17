@@ -1,6 +1,7 @@
 // lib/features/tracking/live_tracking_screen.dart
 import 'safety_sheet.dart';
 import 'order_problem_sheet.dart';
+import '../chat/order_chat_screen.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -359,6 +360,26 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                 onPrimary: () => order.status == OrderStatus.accepted
                     ? _confirmPickup(order)
                     : _completeDelivery(order),
+              ),
+            ),
+
+          // Chat with customer (numbers stay private)
+          if (order != null)
+            Positioned(
+              right: 16,
+              bottom: 404,
+              child: FloatingActionButton.small(
+                heroTag: 'chat_fab',
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OrderChatScreen(
+                        orderId: order.id, orderNumber: order.orderNumber),
+                  ),
+                ),
+                backgroundColor: Colors.white,
+                child: const Icon(Icons.chat_bubble_outline,
+                    color: AppColors.primary),
               ),
             ),
 
