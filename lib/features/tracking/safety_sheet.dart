@@ -17,6 +17,9 @@ Future<void> showSafetySheet(
   double? lat,
   double? lng,
   String? orderNumber,
+  String? problemTitle,
+  String? problemSubtitle,
+  VoidCallback? onProblem,
 }) {
   return showModalBottomSheet<void>(
     context: context,
@@ -53,6 +56,17 @@ Future<void> showSafetySheet(
                 onTap: () async {
                   Navigator.pop(ctx);
                   await launchPhoneCall(kSupportPhone);
+                },
+              ),
+            if (onProblem != null)
+              _Action(
+                icon: Icons.report_problem_outlined,
+                color: AppColors.warning,
+                title: problemTitle ?? "I can't deliver this order",
+                subtitle: problemSubtitle ?? 'Tell us what happened',
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onProblem();
                 },
               ),
             if (lat != null && lng != null)

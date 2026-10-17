@@ -62,6 +62,26 @@ class OrderRepository {
     );
   }
 
+  /// Accepted but can't make it (before pickup): POST .../release.
+  Future<void> releaseOrder(String orderId, String reason) async {
+    await _api.post('${ApiConstants.ordersBase}/$orderId/release',
+        data: {'reason': reason});
+  }
+
+  /// Collected but couldn't hand over: POST .../fail-delivery.
+  Future<void> failDelivery(String orderId,
+      {required String reasonCode,
+      String? note,
+      double? lat,
+      double? lng}) async {
+    await _api.post('${ApiConstants.ordersBase}/$orderId/fail-delivery', data: {
+      'reason_code': reasonCode,
+      if (note != null && note.isNotEmpty) 'note': note,
+      if (lat != null) 'latitude': lat,
+      if (lng != null) 'longitude': lng,
+    });
+  }
+
   /// "Confirm Pickup" button — rider collected cylinder from vendor.
   /// Moves DB: dispatched → ready.
   Future<OrderModel> pickupOrder(String orderId) async {

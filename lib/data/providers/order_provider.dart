@@ -211,6 +211,32 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
+  /// Hand an accepted order back (before pickup). Returns an error message or null.
+  Future<String?> releaseOrder(String orderId, String reason) async {
+    try {
+      await _repo.releaseOrder(orderId, reason);
+      state = state.copyWith(
+          activeOrders: state.activeOrders.where((o) => o.id != orderId).toList());
+      return null;
+    } catch (e) {
+      return dioErrorMessage(e);
+    }
+  }
+
+  /// Report that a collected order couldn't be delivered. Returns an error message or null.
+  Future<String?> failDelivery(String orderId,
+      {required String reasonCode, String? note, double? lat, double? lng}) async {
+    try {
+      await _repo.failDelivery(orderId,
+          reasonCode: reasonCode, note: note, lat: lat, lng: lng);
+      state = state.copyWith(
+          activeOrders: state.activeOrders.where((o) => o.id != orderId).toList());
+      return null;
+    } catch (e) {
+      return dioErrorMessage(e);
+    }
+  }
+
   /// "Confirm Pickup" — rider collected the cylinder, now en route.
   Future<bool> pickupOrder(String orderId) async {
     try {
