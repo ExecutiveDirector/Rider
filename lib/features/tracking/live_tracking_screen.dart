@@ -1,5 +1,6 @@
 // lib/features/tracking/live_tracking_screen.dart
 import 'safety_sheet.dart';
+import 'order_problem_sheet.dart';
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -372,6 +373,24 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                 lat: tracking.currentPosition?.latitude,
                 lng: tracking.currentPosition?.longitude,
                 orderNumber: order?.orderNumber,
+                onProblem: order == null
+                    ? null
+                    : () async {
+                        final removed = await showOrderProblemSheet(
+                          context,
+                          ref,
+                          order,
+                          lat: tracking.currentPosition?.latitude,
+                          lng: tracking.currentPosition?.longitude,
+                        );
+                        if (removed == true && mounted) Navigator.pop(context);
+                      },
+                problemTitle: order?.status == OrderStatus.inTransit
+                    ? 'Delivery failed'
+                    : "I can't deliver this order",
+                problemSubtitle: order?.status == OrderStatus.inTransit
+                    ? 'Customer unreachable, refused, wrong address…'
+                    : 'Hand it back so another rider can take it',
               ),
               backgroundColor: Colors.white,
               child: const Icon(Icons.shield_outlined, color: AppColors.error),
