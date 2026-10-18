@@ -356,30 +356,17 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
                 target: target,
                 busy: _busy,
                 onCall: () => _callCustomer(order.customerPhone),
-                onNavigate: target == null ? null : () => _navigate(target),
-                onPrimary: () => order.status == OrderStatus.accepted
-                    ? _confirmPickup(order)
-                    : _completeDelivery(order),
-              ),
-            ),
-
-          // Chat with customer (numbers stay private)
-          if (order != null)
-            Positioned(
-              right: 16,
-              bottom: 404,
-              child: FloatingActionButton.small(
-                heroTag: 'chat_fab',
-                onPressed: () => Navigator.push(
+                onChat: () => Navigator.push(
                   context,
                   MaterialPageRoute(
                     builder: (_) => OrderChatScreen(
                         orderId: order.id, orderNumber: order.orderNumber),
                   ),
                 ),
-                backgroundColor: Colors.white,
-                child: const Icon(Icons.chat_bubble_outline,
-                    color: AppColors.primary),
+                onNavigate: target == null ? null : () => _navigate(target),
+                onPrimary: () => order.status == OrderStatus.accepted
+                    ? _confirmPickup(order)
+                    : _completeDelivery(order),
               ),
             ),
 
@@ -631,6 +618,7 @@ class _TrackingInfoPanel extends StatelessWidget {
   final _Target? target;
   final bool busy;
   final VoidCallback onCall;
+  final VoidCallback onChat;
   final VoidCallback? onNavigate;
   final VoidCallback onPrimary;
 
@@ -639,6 +627,7 @@ class _TrackingInfoPanel extends StatelessWidget {
     required this.target,
     required this.busy,
     required this.onCall,
+    required this.onChat,
     required this.onNavigate,
     required this.onPrimary,
   });
@@ -679,15 +668,7 @@ class _TrackingInfoPanel extends StatelessWidget {
               ),
             ),
           ),
-          Text(
-            atPickup ? 'STEP 1 OF 2 · PICK UP' : 'STEP 2 OF 2 · DELIVER',
-            style: const TextStyle(
-              fontSize: 11,
-              letterSpacing: 0.8,
-              fontWeight: FontWeight.w800,
-              color: AppColors.textHint,
-            ),
-          ),
+          _ProgressSteps(order: order),
           const SizedBox(height: 8),
           Row(
             children: [
@@ -756,58 +737,181 @@ class _TrackingInfoPanel extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 14),
+          // Call, chat, navigate and the main action share one row.
           Row(
             children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: onCall,
-                  icon: const Icon(Icons.call, size: 17),
-                  label: const Text('Call'),
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(46),
-                  ),
-                ),
-              ),
+              _SquareAction(icon: Icons.call, tooltip: 'Call customer', onTap: onCall),
+              const SizedBox(width: 8),
+              _SquareAction(icon: Icons.chat_bubble_outline, tooltip: 'Chat', onTap: onChat),
+              const SizedBox(width: 8),
+              _SquareAction(icon: Icons.navigation, tooltip: 'Navigate', onTap: onNavigate),
               const SizedBox(width: 10),
               Expanded(
-                flex: 2,
-                child: GradientButton(
-                  label: 'Navigate',
-                  icon: Icons.navigation,
-                  height: 46,
-                  onPressed: onNavigate,
+                child: FilledButton(
+                  onPressed: busy ? null : onPrimary,
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        atPickup ? AppColors.accepted : AppColors.delivered,
+                    minimumSize: const Size.fromHeight(48),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                  ),
+                  child: busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                  atPickup
+                                      ? Icons.inventory_2_outlined
+                                      : Icons.check_circle_outline,
+                                  size: 18),
+                              const SizedBox(width: 6),
+                              Text(
+                                atPickup ? 'Confirm pickup' : 'Complete delivery',
+                                style: const TextStyle(fontWeight: FontWeight.w700),
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: busy ? null : onPrimary,
-              style: FilledButton.styleFrom(
-                backgroundColor:
-                    atPickup ? AppColors.accepted : AppColors.delivered,
-                minimumSize: const Size.fromHeight(48),
-              ),
-              icon: busy
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Icon(atPickup
-                      ? Icons.inventory_2_outlined
-                      : Icons.check_circle_outline),
-              label: Text(
-                atPickup ? 'Confirm pickup' : 'Complete delivery',
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
         ],
       ),
+    );
+  }
+}
+
+/// 48px square icon button used in the tracking action row.
+class _SquareAction extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  const _SquareAction({required this.icon, required this.tooltip, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: AppColors.primaryLight,
+        borderRadius: BorderRadius.circular(12),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 48,
+            height: 48,
+            child: Icon(icon,
+                size: 20,
+                color: enabled ? AppColors.primary : AppColors.textHint),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Where this delivery is: Accepted → Ready → Picked up → Delivered.
+class _ProgressSteps extends StatelessWidget {
+  final OrderModel order;
+  const _ProgressSteps({required this.order});
+
+  static const _labels = ['Accepted', 'Ready', 'Picked up', 'Delivered'];
+
+  int get _current {
+    if (order.status == OrderStatus.delivered) return 3;
+    if (order.status == OrderStatus.inTransit) return 2;
+    return (order.dbStatus ?? '').toLowerCase() == 'ready' ? 1 : 0;
+  }
+
+  String get _hint {
+    switch (_current) {
+      case 0:
+        return 'Vendor is preparing the order. Head to the outlet.';
+      case 1:
+        return 'Order is ready. Collect it from the vendor.';
+      case 2:
+        return 'On the way. Deliver to the customer.';
+      default:
+        return 'Delivered.';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cur = _current;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            for (var i = 0; i < _labels.length; i++) ...[
+              Expanded(
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Container(
+                            height: 3,
+                            color: i == 0
+                                ? Colors.transparent
+                                : (i <= cur ? AppColors.primary : AppColors.divider),
+                          ),
+                        ),
+                        Container(
+                          width: 14,
+                          height: 14,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: i <= cur ? AppColors.primary : Colors.white,
+                            border: Border.all(
+                                color: i <= cur ? AppColors.primary : AppColors.divider,
+                                width: 2),
+                          ),
+                          child: i < cur
+                              ? const Icon(Icons.check, size: 9, color: Colors.white)
+                              : null,
+                        ),
+                        Expanded(
+                          child: Container(
+                            height: 3,
+                            color: i == _labels.length - 1
+                                ? Colors.transparent
+                                : (i < cur ? AppColors.primary : AppColors.divider),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _labels[i],
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: i == cur ? FontWeight.w800 : FontWeight.w500,
+                        color: i <= cur ? AppColors.textPrimary : AppColors.textHint,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 8),
+        Text(_hint,
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary)),
+      ],
     );
   }
 }

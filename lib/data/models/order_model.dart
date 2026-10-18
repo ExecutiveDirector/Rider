@@ -66,6 +66,9 @@ class OrderModel {
   final double quantity; // first item's quantity
   final double totalAmount;
   final OrderStatus status;
+  /// Raw backend status (confirmed / preparing / ready / dispatched …): tells the rider
+  /// whether the vendor has the order ready to collect.
+  final String? dbStatus;
   final DateTime createdAt;
   final String? notes;
   final double? distanceKm;
@@ -110,6 +113,7 @@ class OrderModel {
     required this.quantity,
     required this.totalAmount,
     required this.status,
+    this.dbStatus,
     required this.createdAt,
     this.notes,
     this.distanceKm,
@@ -254,6 +258,7 @@ class OrderModel {
       quantity: quantity,
       totalAmount: totalAmount,
       status: OrderStatus.fromString(rawStatus),
+      dbStatus: json['db_status']?.toString(),
       createdAt: createdAt,
       notes: json['notes'] as String? ?? json['customer_note'] as String?,
       distanceKm: asDouble(json['distanceKm'] ?? json['distance_km']),
@@ -311,6 +316,7 @@ class OrderModel {
         quantity: quantity,
         totalAmount: totalAmount,
         status: status ?? this.status,
+        dbStatus: dbStatus,
         createdAt: createdAt,
         notes: notes,
         distanceKm: distanceKm,
