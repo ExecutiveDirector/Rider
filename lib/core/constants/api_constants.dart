@@ -26,6 +26,7 @@ class ApiConstants {
   static const String completedOrders = '/riders/orders/completed';
   static const String ordersBase = '/riders/orders'; // + /:id[/verb]
   static const String pushTokenRegister = '/riders/push-token/register';
+  static const String pushTest = '/riders/push-test';
   static const String pushTokenUnregister = '/riders/push-token/unregister';
 
   // Tracking

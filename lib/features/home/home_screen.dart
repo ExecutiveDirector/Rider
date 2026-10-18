@@ -326,43 +326,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
               padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  if (!orderState.isLoading)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.only(bottom: 4),
-                        child: Text(
-                          'Pull down to refresh',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: AppColors.textHint,
-                          ),
-                        ),
-                      ),
-                    ),
-                  _StatsRow(),
-                  const SizedBox(height: 12),
-                  const GoalCard(),
-                  const QuestCard(),
-                  const SizedBox(height: 8),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TextButton.icon(
-                      onPressed: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                            builder: (_) => const DemandMapScreen()),
-                      ),
-                      icon: const Icon(Icons.local_fire_department_outlined,
-                          size: 18),
-                      label: const Text('See busy areas'),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       const Text(
-                        'Active Orders',
+                        'Your orders',
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -427,6 +395,41 @@ class _HomeScreenState extends ConsumerState<HomeScreen>
                         ),
                       );
                     }),
+                  const SizedBox(height: 24),
+                  const Text(
+                    'Today',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _StatsRow(),
+                  const SizedBox(height: 12),
+                  const GoalCard(),
+                  const QuestCard(),
+                  const SizedBox(height: 4),
+                  Card(
+                    margin: EdgeInsets.zero,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      side: BorderSide(color: AppColors.textHint.withOpacity(0.25)),
+                    ),
+                    child: ListTile(
+                      leading: const Icon(Icons.local_fire_department_outlined,
+                          color: AppColors.primary),
+                      title: const Text('Busy areas'),
+                      subtitle: const Text('See where orders are waiting'),
+                      trailing: const Icon(Icons.chevron_right),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) => const DemandMapScreen()),
+                      ),
+                    ),
+                  ),
                 ]),
               ),
             ),

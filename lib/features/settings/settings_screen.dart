@@ -146,6 +146,16 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const Divider(),
 
           _sectionTitle('Notifications'),
+          _tile(
+            icon: Icons.campaign_outlined,
+            title: 'Test job alert',
+            subtitle: 'Sends a loud test in 10 seconds. Lock your phone to check it wakes up',
+            onTap: () async {
+              final msg = await NotificationService.instance.sendTestAlert();
+              if (!mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+            },
+          ),
           SwitchListTile(
             secondary: const Icon(Icons.notifications_outlined),
             title: const Text('Push Notifications'),

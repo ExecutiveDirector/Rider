@@ -9,6 +9,7 @@ import '../../data/providers/order_provider.dart';
 import 'provider_container.dart';
 import 'api_service.dart';
 import '../constants/api_constants.dart';
+import 'package:dio/dio.dart' show DioException;
 
 const _kNewOrderChannelId = 'new_order_channel';
 
@@ -70,7 +71,8 @@ Future<void> _firebaseBackgroundHandler(RemoteMessage message) async {
   debugPrint('[FCM] Background message: ${message.messageId}');
   final data = message.data;
   // A message that carries a `notification` block is shown by the system.
-  if (message.notification != null || data['type'] != 'new_order') return;
+  if (message.notification != null ||
+      (data['type'] != 'new_order' && data['type'] != 'test_alert')) return;
 
   final plugin = FlutterLocalNotificationsPlugin();
   await plugin.initialize(const InitializationSettings(
@@ -231,6 +233,24 @@ class NotificationService {
   Future<void> registerPushTokenIfAvailable() async {
     final token = await _fcm.getToken();
     if (token != null) await _registerTokenWithBackend(token);
+  }
+
+  /// Asks the server to push a loud test alert to this phone after [delaySeconds];
+  /// the rider locks the phone to check it wakes up. Returns text to show.
+  Future<String> sendTestAlert({int delaySeconds = 10}) async {
+    try {
+      final res = await ApiService.instance
+          .post(ApiConstants.pushTest, data: {'delay_seconds': delaySeconds});
+      final n = res.data is Map ? res.data['active_devices'] : null;
+      return 'Test alert sends in $delaySeconds seconds to ${n ?? 1} device(s). Lock your phone now.';
+    } on DioException catch (e) {
+      final d = e.response?.data;
+      return (d is Map && d['error'] != null)
+          ? d['error'].toString()
+          : 'Could not reach the server. Check your internet.';
+    } catch (_) {
+      return 'Could not send the test alert.';
+    }
   }
 
   /// Call on logout. Matches DELETE /riders/push-token/unregister
