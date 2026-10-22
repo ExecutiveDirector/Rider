@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../constants/api_constants.dart';
 import 'storage_service.dart';
+import 'session_refresher.dart';
 import 'location_service.dart';
 import 'provider_container.dart';
 import '../../data/providers/auth_provider.dart';
@@ -21,6 +22,10 @@ class ApiService {
   static final ApiService instance = ApiService._();
 
   late final Dio _dio;
+
+  /// Exposed so tests can swap the HTTP adapter.
+  @visibleForTesting
+  Dio get dioForTest => _dio;
 
   void init() {
     _dio = Dio(
@@ -110,32 +115,31 @@ class _AuthInterceptor extends Interceptor {
 
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401) {
-      // Try token refresh
+    // A 401 normally just means the 8h access token ran out. Renew it and
+    // retry the request once. Log the rider out ONLY if the server rejects
+    // the refresh token itself; being offline or slow never logs anyone out.
+    final path = err.requestOptions.path;
+    final skip = err.response?.statusCode != 401 ||
+        path.contains(ApiConstants.login) ||
+        path.contains(ApiConstants.refreshToken) ||
+        err.requestOptions.extra['session_retried'] == true;
+    if (skip) return handler.next(err);
+
+    final outcome = await SessionRefresher.refresh();
+    if (outcome == RefreshOutcome.renewed) {
+      final newToken = await StorageService.instance.getToken();
+      final opts = err.requestOptions
+        ..headers['Authorization'] = 'Bearer $newToken'
+        ..extra['session_retried'] = true;
       try {
-        final refreshToken = await StorageService.instance.getRefreshToken();
-        if (refreshToken == null) {
-          await _forceLogout();
-          return handler.next(err);
-        }
-
-        final dio = Dio(BaseOptions(baseUrl: ApiConstants.baseUrl));
-        final response = await dio.post(
-          ApiConstants.refreshToken,
-          data: {'refreshToken': refreshToken},
-        );
-
-        final newToken = response.data['token'] as String;
-        await StorageService.instance.saveToken(newToken);
-
-        // Retry original request
-        err.requestOptions.headers['Authorization'] = 'Bearer $newToken';
-        final retryResponse =
-            await ApiService.instance._dio.fetch(err.requestOptions);
-        return handler.resolve(retryResponse);
-      } catch (_) {
-        await _forceLogout();
+        return handler.resolve(await ApiService.instance._dio.fetch(opts));
+      } on DioException catch (retryError) {
+        // The retry itself failed (e.g. 500): report that error, keep the session.
+        return handler.next(retryError);
       }
+    }
+    if (outcome == RefreshOutcome.rejected) {
+      await _forceLogout();
     }
     handler.next(err);
   }
