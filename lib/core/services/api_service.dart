@@ -108,36 +108,66 @@ class _AuthInterceptor extends Interceptor {
     handler.next(options);
   }
 
+  // One refresh at a time: parallel 401s share the same attempt.
+  static Future<String?>? _refreshing;
+
   @override
   void onError(DioException err, ErrorInterceptorHandler handler) async {
-    if (err.response?.statusCode == 401) {
-      // Try token refresh
-      try {
-        final refreshToken = await StorageService.instance.getRefreshToken();
-        if (refreshToken == null) {
-          await _forceLogout();
-          return handler.next(err);
+    final isAuthCall = err.requestOptions.path.contains(ApiConstants.refreshToken) ||
+        err.requestOptions.path.contains('/login');
+    if (err.response?.statusCode == 401 &&
+        !isAuthCall &&
+        err.requestOptions.extra['retried'] != true) {
+      final newToken =
+          await (_refreshing ??= _refresh().whenComplete(() => _refreshing = null));
+      if (newToken != null) {
+        try {
+          err.requestOptions.extra['retried'] = true;
+          err.requestOptions.headers['Authorization'] = 'Bearer $newToken';
+          final retryResponse =
+              await ApiService.instance._dio.fetch(err.requestOptions);
+          return handler.resolve(retryResponse);
+        } on DioException catch (e) {
+          return handler.next(e);
         }
-
-        final dio = Dio(BaseOptions(baseUrl: ApiConstants.baseUrl));
-        final response = await dio.post(
-          ApiConstants.refreshToken,
-          data: {'refreshToken': refreshToken},
-        );
-
-        final newToken = response.data['token'] as String;
-        await StorageService.instance.saveToken(newToken);
-
-        // Retry original request
-        err.requestOptions.headers['Authorization'] = 'Bearer $newToken';
-        final retryResponse =
-            await ApiService.instance._dio.fetch(err.requestOptions);
-        return handler.resolve(retryResponse);
-      } catch (_) {
-        await _forceLogout();
       }
     }
     handler.next(err);
+  }
+
+  /// Returns a new access token, or null. Riders stay signed in: we only log
+  /// out when the server definitively rejects the refresh token (401/403).
+  /// Offline / server errors keep the session so the rider can retry.
+  Future<String?> _refresh() async {
+    final refreshToken = await StorageService.instance.getRefreshToken();
+    if (refreshToken == null || refreshToken.isEmpty) {
+      await _forceLogout();
+      return null;
+    }
+    try {
+      final dio = Dio(BaseOptions(
+        baseUrl: ApiConstants.baseUrl,
+        connectTimeout: const Duration(seconds: 20),
+        receiveTimeout: const Duration(seconds: 30),
+      ));
+      final response = await dio.post(
+        ApiConstants.refreshToken,
+        data: {'refreshToken': refreshToken},
+      );
+      final newToken = response.data['token'] as String;
+      await StorageService.instance.saveToken(newToken);
+      final rotated = response.data['refreshToken'];
+      if (rotated is String && rotated.isNotEmpty) {
+        await StorageService.instance.saveRefreshToken(rotated);
+      }
+      return newToken;
+    } on DioException catch (e) {
+      final code = e.response?.statusCode;
+      if (code == 401 || code == 403) await _forceLogout();
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<void> _forceLogout() async {
