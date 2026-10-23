@@ -101,6 +101,10 @@ class OrderModel {
   /// When the offer lapses server-side (dispatch offers only).
   final DateTime? offerExpiresAt;
 
+  /// Latest journey step the rider reported (en_route_pickup, arrived_pickup,
+  /// en_route_delivery, arrived_customer), or null.
+  final String? riderProgress;
+
   const OrderModel({
     required this.id,
     required this.orderNumber,
@@ -127,6 +131,7 @@ class OrderModel {
     this.riderEarning,
     this.otpRequired = false,
     this.offerExpiresAt,
+    this.riderProgress,
   });
 
   bool get hasDeliveryLocation => deliveryLat != 0 || deliveryLng != 0;
@@ -275,6 +280,7 @@ class OrderModel {
           json['requires_delivery_otp'] ??
           json['otp_required']),
       offerExpiresAt: DateTime.tryParse(expiresRaw),
+      riderProgress: json['rider_progress']?.toString(),
     );
   }
 
@@ -330,5 +336,6 @@ class OrderModel {
         riderEarning: riderEarning,
         otpRequired: otpRequired,
         offerExpiresAt: offerExpiresAt,
+        riderProgress: riderProgress,
       );
 }
