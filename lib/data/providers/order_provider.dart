@@ -237,6 +237,18 @@ class OrderNotifier extends StateNotifier<OrderState> {
     }
   }
 
+  /// Reports a journey step (on my way / arrived) so admin and customer can follow along.
+  Future<bool> sendProgress(String orderId, String step) async {
+    try {
+      final updated = await _repo.sendProgress(orderId, step);
+      _replaceActive(updated);
+      return true;
+    } catch (e) {
+      state = state.copyWith(error: dioErrorMessage(e));
+      return false;
+    }
+  }
+
   /// "Confirm Pickup" — rider collected the cylinder, now en route.
   Future<bool> pickupOrder(String orderId) async {
     try {

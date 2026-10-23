@@ -82,6 +82,16 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     }
   }
 
+  Future<void> _sendStep(String orderId, String step) async {
+    setState(() => _isCompleting = true);
+    final ok = await ref.read(orderProvider.notifier).sendProgress(orderId, step);
+    if (!mounted) return;
+    setState(() => _isCompleting = false);
+    if (!ok) {
+      _toast(ref.read(orderProvider).error ?? 'Could not update progress.', error: true);
+    }
+  }
+
   /// Delivery is completed on its own screen, where the rider enters the
   /// customer's code, takes a photo and records cash / empty cylinders.
   Future<void> _deliverOrder(String orderId) async {
@@ -237,6 +247,49 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
               const SizedBox(height: 12),
               // Pickup comes first; the delivery can only be completed once
               // the cylinder is actually on the bike.
+              // Journey steps: let admin and the customer follow the rider.
+              if (order.status == OrderStatus.accepted &&
+                  order.riderProgress != 'arrived_pickup') ...[
+                OutlinedButton.icon(
+                  icon: Icon(order.riderProgress == 'en_route_pickup'
+                      ? Icons.place_outlined
+                      : Icons.directions_bike_outlined),
+                  label: Text(order.riderProgress == 'en_route_pickup'
+                      ? "I've arrived at the vendor"
+                      : "I'm on my way to the vendor"),
+                  onPressed: _isCompleting
+                      ? null
+                      : () => _sendStep(
+                          order.id,
+                          order.riderProgress == 'en_route_pickup'
+                              ? 'arrived_pickup'
+                              : 'en_route_pickup'),
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48)),
+                ),
+                const SizedBox(height: 12),
+              ],
+              if (order.status == OrderStatus.inTransit &&
+                  order.riderProgress != 'arrived_customer') ...[
+                OutlinedButton.icon(
+                  icon: Icon(order.riderProgress == 'en_route_delivery'
+                      ? Icons.place_outlined
+                      : Icons.directions_bike_outlined),
+                  label: Text(order.riderProgress == 'en_route_delivery'
+                      ? "I've arrived at the customer"
+                      : "I'm on my way to the customer"),
+                  onPressed: _isCompleting
+                      ? null
+                      : () => _sendStep(
+                          order.id,
+                          order.riderProgress == 'en_route_delivery'
+                              ? 'arrived_customer'
+                              : 'en_route_delivery'),
+                  style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(48)),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (order.status == OrderStatus.accepted)
                 GradientButton(
                   icon: Icons.inventory_2_outlined,

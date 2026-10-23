@@ -82,6 +82,12 @@ class OrderRepository {
     });
   }
 
+  /// Journey step: en_route_pickup | arrived_pickup | en_route_delivery | arrived_customer.
+  Future<OrderModel> sendProgress(String orderId, String step) async {
+    final res = await _api.post('${ApiConstants.ordersBase}/$orderId/progress', data: {'step': step});
+    return OrderModel.fromJson(res.data['order'] ?? res.data);
+  }
+
   /// "Confirm Pickup" button — rider collected cylinder from vendor.
   /// Moves DB: dispatched → ready.
   Future<OrderModel> pickupOrder(String orderId) async {
