@@ -204,7 +204,8 @@ class NotificationService {
     }
 
     final token = await _fcm.getToken();
-    debugPrint('[Notifications] FCM Token: $token');
+    // Never log the full push token; it identifies this device.
+    debugPrint('[Notifications] FCM token ${token == null ? 'unavailable' : 'obtained'}');
     if (token != null) await _registerTokenWithBackend(token);
     _fcm.onTokenRefresh.listen(_registerTokenWithBackend);
   }

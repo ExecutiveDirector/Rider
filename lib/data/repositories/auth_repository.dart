@@ -95,7 +95,9 @@ class AuthRepository {
 
   Future<void> logout() async {
     try {
-      await _api.post(ApiConstants.logout);
+      // Sending the refresh token lets the server end the long-lived session too.
+      await _api.post(ApiConstants.logout,
+          data: {'refreshToken': await _storage.getRefreshToken()});
     } catch (_) {
       // Clear local state regardless of API response
     } finally {
