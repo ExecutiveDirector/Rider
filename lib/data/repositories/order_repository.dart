@@ -1,4 +1,5 @@
 // lib/data/repositories/order_repository.dart
+import '../models/cod_payment.dart';
 import 'package:dio/dio.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/api_service.dart';
@@ -100,6 +101,18 @@ class OrderRepository {
   Future<OrderModel> deliverOrder(String orderId) async {
     final res = await _api.patch('${ApiConstants.ordersBase}/$orderId/deliver');
     return OrderModel.fromJson(res.data['order'] ?? res.data);
+  }
+
+  /// Asks the customer's confirmed phone to pay a cash-on-delivery order by
+  /// M-Pesa. Returns the payment state (see [CodPayment]).
+  Future<CodPayment> requestMpesa(String orderId) async {
+    final res = await _api.post('${ApiConstants.ordersBase}/$orderId/request-mpesa');
+    return CodPayment.fromJson(Map<String, dynamic>.from(res.data as Map));
+  }
+
+  Future<CodPayment> codPayment(String orderId) async {
+    final res = await _api.get('${ApiConstants.ordersBase}/$orderId/cod-payment');
+    return CodPayment.fromJson(Map<String, dynamic>.from(res.data as Map));
   }
 
   /// Completes the delivery with proof. Sent as multipart when a photo is

@@ -13,11 +13,13 @@ class TripSummaryScreen extends ConsumerStatefulWidget {
   final String orderNumber;
   final double? earning;
   final double cashToRemit;
+  final bool paidByMpesa;
   const TripSummaryScreen({
     super.key,
     required this.orderNumber,
     this.earning,
     this.cashToRemit = 0,
+    this.paidByMpesa = false,
   });
 
   @override
@@ -119,6 +121,26 @@ class _TripSummaryScreenState extends ConsumerState<TripSummaryScreen> {
                     ],
                   ),
                 ),
+                if (widget.paidByMpesa) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD1FAE5),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.check_circle_outline, color: Color(0xFF064E3B)),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text('Customer paid by M-Pesa — no cash to remit.',
+                              style: TextStyle(fontSize: 13, color: Color(0xFF064E3B))),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 if (widget.cashToRemit > 0) ...[
                   const SizedBox(height: 12),
                   Container(
