@@ -409,7 +409,9 @@ class _IncomingOrderSheetState extends ConsumerState<IncomingOrderSheet>
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            'Cash on delivery — collect KES ${order.amountDue.toStringAsFixed(0)}',
+                            order.cashlessOnly
+                                ? 'Pay on delivery — M-Pesa request, KES ${order.amountDue.toStringAsFixed(0)}'
+                                : 'Pay on delivery — KES ${order.amountDue.toStringAsFixed(0)} (M-Pesa or cash)',
                             style: const TextStyle(
                               color: AppColors.textPrimary,
                               fontWeight: FontWeight.w700,

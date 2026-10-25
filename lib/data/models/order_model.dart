@@ -90,6 +90,14 @@ class OrderModel {
   /// Cash the rider must collect. 0 when the order is prepaid.
   final double amountDue;
 
+  /// True when AquaGas does not allow taking cash for this order: the rider
+  /// must request M-Pesa from the customer instead.
+  final bool cashlessOnly;
+
+  /// True when the first item looks like LPG (so we can say "13 kg cylinder").
+  bool get isGasItem =>
+      RegExp(r'gas|lpg|cylinder|refill|\bkg\b', caseSensitive: false).hasMatch(gasType);
+
   /// What the rider earns for this job, when the backend sends it. Null means
   /// "unknown" — the UI must not present the order total as the rider's pay.
   final double? riderEarning;
@@ -128,6 +136,7 @@ class OrderModel {
     this.paymentMethod = '',
     this.isCod = false,
     this.amountDue = 0,
+    this.cashlessOnly = false,
     this.riderEarning,
     this.otpRequired = false,
     this.offerExpiresAt,
@@ -274,6 +283,7 @@ class OrderModel {
       paymentMethod: paymentMethod,
       isCod: isCod,
       amountDue: amountDue,
+      cashlessOnly: isCod && asBool(json['cashless_only']),
       riderEarning: asDouble(
           json['rider_earning'] ?? json['rider_fee'] ?? json['riderEarning']),
       otpRequired: asBool(json['delivery_otp_required'] ??
@@ -333,6 +343,7 @@ class OrderModel {
         paymentMethod: paymentMethod,
         isCod: isCod,
         amountDue: amountDue,
+        cashlessOnly: cashlessOnly,
         riderEarning: riderEarning,
         otpRequired: otpRequired,
         offerExpiresAt: offerExpiresAt,
