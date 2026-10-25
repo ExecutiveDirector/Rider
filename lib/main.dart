@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/services/api_service.dart';
 import 'core/services/storage_service.dart';
@@ -12,6 +13,21 @@ import 'app.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Crash and error reporting. Off unless built with
+  // --dart-define=SENTRY_DSN=... (set as a GitHub secret for release builds).
+  // Never sends personal data, screenshots or performance traces.
+  try {
+    await SentryFlutter.init((o) {
+      o.dsn = const String.fromEnvironment('SENTRY_DSN');
+      o.environment = const String.fromEnvironment('APP_ENV', defaultValue: 'production');
+      o.sendDefaultPii = false;
+      o.attachScreenshot = false;
+      o.tracesSampleRate = 0;
+    });
+  } catch (e) {
+    debugPrint('[Sentry] Init failed (non-fatal): $e');
+  }
 
   await SystemChrome.setPreferredOrientations([
     DeviceOrientation.portraitUp,

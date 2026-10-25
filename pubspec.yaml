@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  sentry_flutter: ^8.14.2
 
   # State Management
   flutter_riverpod: ^2.4.9
