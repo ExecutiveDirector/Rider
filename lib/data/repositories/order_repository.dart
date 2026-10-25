@@ -3,6 +3,7 @@ import 'package:dio/dio.dart';
 import '../../core/constants/api_constants.dart';
 import '../../core/services/api_service.dart';
 import '../models/delivery_proof.dart';
+import '../models/mpesa_request.dart';
 import '../models/order_model.dart';
 
 class OrderRepository {
@@ -128,5 +129,31 @@ class OrderRepository {
       return OrderModel.fromJson(Map<String, dynamic>.from(order as Map));
     }
     throw StateError('Unexpected response from the delivery endpoint');
+  }
+
+  // ── Cashless (M-Pesa) completion of cash-on-delivery orders ───────────────
+
+  static MpesaRequestState _mpesaFrom(dynamic data) {
+    if (data is Map && data['mpesa'] is Map) {
+      return MpesaRequestState.fromJson(
+          Map<String, dynamic>.from(data['mpesa'] as Map));
+    }
+    return MpesaRequestState.none;
+  }
+
+  /// Asks the customer to pay the cash amount by M-Pesa (STK push sent by the
+  /// server). [phone] is only set when the customer authorises another number.
+  Future<MpesaRequestState> requestMpesa(String orderId, {String? phone}) async {
+    final res = await _api.post(
+      '${ApiConstants.ordersBase}/$orderId/mpesa/request',
+      data: {if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim()},
+    );
+    return _mpesaFrom(res.data);
+  }
+
+  /// Current state of the request; the rider polls this while waiting.
+  Future<MpesaRequestState> mpesaStatus(String orderId) async {
+    final res = await _api.get('${ApiConstants.ordersBase}/$orderId/mpesa/status');
+    return _mpesaFrom(res.data);
   }
 }

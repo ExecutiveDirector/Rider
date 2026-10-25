@@ -64,6 +64,7 @@ class ProofRules {
     required bool hasPhoto,
     String? cashText,
     String note = '',
+    bool cashRequired = true,
   }) {
     final code = otp.trim();
 
@@ -77,7 +78,7 @@ class ProofRules {
       return 'Take a photo of the delivery or enter the customer\'s code.';
     }
 
-    if (order.isCod) {
+    if (order.isCod && cashRequired) {
       final cash = double.tryParse((cashText ?? '').replaceAll(',', '').trim());
       if (cash == null) {
         return 'Enter the cash you collected from the customer.';

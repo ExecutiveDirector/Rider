@@ -9,9 +9,11 @@ import '../../core/constants/app_colors.dart';
 import '../../core/services/location_service.dart';
 import '../../core/widgets/gradient_button.dart';
 import '../../data/models/delivery_proof.dart';
+import '../../data/models/mpesa_request.dart';
 import '../../data/models/order_model.dart';
 import '../../data/providers/order_provider.dart';
 import 'trip_summary_screen.dart';
+import 'widgets/mpesa_collect_card.dart';
 
 /// Completes a delivery with proof: customer code, a drop-off photo, the
 /// cylinder swap and — for cash-on-delivery orders — the cash collected.
@@ -35,6 +37,10 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
   int _emptyCylinders = 0;
   bool _submitting = false;
   String? _error;
+
+  // Cashless first: a COD order is settled by M-Pesa unless the rider opts for cash.
+  MpesaRequestState _mpesa = MpesaRequestState.none;
+  bool _cashMode = false;
 
   @override
   void initState() {
@@ -87,7 +93,21 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
   }
 
   Future<void> _submit(OrderModel order) async {
+    final paidByMpesa = _mpesa.isPaid;
+    if (order.isCod && !paidByMpesa) {
+      if (_mpesa.isPending) {
+        setState(() => _error =
+            'Waiting for the customer\'s M-Pesa payment. Wait for it to finish first.');
+        return;
+      }
+      if (!_cashMode) {
+        setState(() => _error =
+            'Request the M-Pesa payment, or choose \'Customer is paying cash instead\'.');
+        return;
+      }
+    }
     final problem = ProofRules.validate(
+      cashRequired: !paidByMpesa,
       order: order,
       otp: _otpCtrl.text,
       hasPhoto: _photo != null,
@@ -144,7 +164,7 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
     }
     if (!mounted) return;
 
-    final cash = order.isCod
+    final cash = (order.isCod && !paidByMpesa)
         ? double.tryParse(_cashCtrl.text.replaceAll(',', '').trim())
         : null;
 
@@ -179,6 +199,7 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
           orderNumber: order.orderNumber,
           earning: order.riderEarning,
           cashToRemit: cash ?? 0,
+          paidByMpesa: paidByMpesa ? _mpesa.amount : 0,
         ),
       ),
     );
@@ -316,8 +337,33 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
             ),
             const SizedBox(height: 14),
 
-            // ── Cash on delivery ───────────────────────────────────────────
-            if (order.isCod) ...[
+            // ── Cashless collection (M-Pesa) ───────────────────────────────
+            if (order.isCod || _mpesa.isPaid) ...[
+              MpesaCollectCard(
+                orderId: order.id,
+                amount: order.amountDue,
+                customerPhone: order.customerPhone,
+                cashChosen: _cashMode && !_mpesa.isPaid,
+                onChanged: (s) {
+                  if (mounted) setState(() => _mpesa = s);
+                },
+                onUseCash: () {
+                  if (!mounted) return;
+                  setState(() {
+                    _cashMode = true;
+                    _error = null;
+                    if (_cashCtrl.text.isEmpty) {
+                      _cashCtrl.text = order.amountDue.toStringAsFixed(0);
+                    }
+                  });
+                },
+                onUseMpesa: () => setState(() => _cashMode = false),
+              ),
+              const SizedBox(height: 14),
+            ],
+
+            // ── Cash on delivery (fallback) ────────────────────────────────
+            if (order.isCod && _cashMode && !_mpesa.isPaid) ...[
               _Card(
                 icon: Icons.payments_outlined,
                 title: 'Cash collected',
@@ -397,10 +443,10 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
 
             const SizedBox(height: 20),
             GradientButton(
-              label: 'Confirm delivery',
+              label: _mpesa.isPaid ? 'Paid · Confirm delivery' : 'Confirm delivery',
               icon: Icons.check_circle_outline,
               loading: _submitting,
-              onPressed: _submitting ? null : () => _submit(order),
+              onPressed: (_submitting || _mpesa.isPending) ? null : () => _submit(order),
             ),
           ],
         ),

@@ -73,3 +73,22 @@ Build-time option: `--dart-define=SUPPORT_PHONE=+254...` enables "Call AquaGas s
 ## Growth endpoints
 - `GET /riders/incentives` → `{ data: { deliveries_today, tiers:[{target,bonus,reached}], next:{target,bonus,remaining}|null, bonus_earned_today } }`
 - `GET /riders/demand-zones?hours=3` → `{ data: { window_hours, zones:[{latitude,longitude,count,intensity,radius_m}] } }`
+
+## Cashless (M-Pesa) completion of cash orders
+For a COD order the rider asks the customer to pay by M-Pesa instead of handing over cash.
+The **server** sends the STK push; only a verified SasaPay callback marks the order paid.
+
+| Call | Body | Response |
+|---|---|---|
+| `POST /riders/orders/:id/mpesa/request` | `{phone?}` (only when the customer authorises another number) | `{reused, mpesa}` |
+| `GET /riders/orders/:id/mpesa/status` | — | `{mpesa, order_status, payment_status}` |
+
+`mpesa` = `{state: "none"\|"pending"\|"paid"\|"failed"\|"expired", amount, seconds_left?, receipt?, reason?, phone? (masked), attempts}`.
+Errors carry `{error, code}`: `NOT_DISPATCHED`, `ALREADY_PAID`, `NOT_COD`, `BAD_PHONE`, `TOO_MANY`, `DISABLED`, `UNAVAILABLE`, `GATEWAY`.
+
+- Order payloads add `can_request_mpesa`.
+- While a request is `pending`, `deliver` returns **409** `code: MPESA_PENDING` (never take cash while a prompt is live).
+- A declined/cancelled prompt does not fail the order — retry, or take cash.
+- Once `paid`, `deliver` needs no `cash_collected`, and no cash is added to the rider's remit balance.
+- Socket: `paymentUpdated {order_id, payment_status:"paid", receipt, amount}` is emitted to `rider_<id>` and `order_<id>`.
+- Server flags: `COD_MPESA_ENABLED` (default true), `RIDER_MPESA_TTL_SECONDS` (default 180), `RIDER_MPESA_MAX_ATTEMPTS` (default 5).
