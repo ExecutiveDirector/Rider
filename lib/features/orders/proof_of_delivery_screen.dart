@@ -255,27 +255,6 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
     Navigator.pop(context, true);
   }
 
-  Widget _buildAmountHeader(OrderModel order) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
-      ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(_paidByMpesa ? 'Paid by M-Pesa' : 'Amount to collect',
-              style: const TextStyle(fontSize: 15, color: Color(0xFF475569))),
-          Text('KES ${order.amountDue.toStringAsFixed(0)}',
-              style: const TextStyle(
-                  fontSize: 28, fontWeight: FontWeight.w800, color: Color(0xFF064E3B))),
-        ],
-      ),
-    );
-  }
-
   Widget _buildMpesaCard(OrderModel order) {
     final due = 'KES ${order.amountDue.toStringAsFixed(0)}';
     if (_paidByMpesa) {
@@ -355,229 +334,389 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
       );
     }
 
+    final showCash = order.isCod && !_paidByMpesa && !order.cashlessOnly;
+    final busy = _submitting;
+
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: Text('Complete #${order.orderNumber}')),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-          children: [
-            // ── Collect payment (first: it is the main job at the door) ────
-            if (order.isCod) ...[
-              _buildAmountHeader(order),
-              const SizedBox(height: 12),
-              _buildMpesaCard(order),
-              if (order.cashlessOnly && !_paidByMpesa) ...[
-                const SizedBox(height: 10),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFECF5EE),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: const Row(children: [
-                    Icon(Icons.money_off_csred_outlined, color: Color(0xFF166534)),
-                    SizedBox(width: 10),
-                    Expanded(
-                      child: Text('Do not accept cash. Every delivery is paid by M-Pesa.',
-                          style: TextStyle(fontWeight: FontWeight.w600)),
-                    ),
-                  ]),
-                ),
-              ],
-              const SizedBox(height: 18),
-            ],
-            // ── Customer code ──────────────────────────────────────────────
-            _Card(
-              icon: Icons.pin_outlined,
-              title: order.otpRequired
-                  ? 'Customer delivery code'
-                  : 'Customer delivery code (optional)',
-              child: TextField(
-                controller: _otpCtrl,
-                enabled: !_submitting,
-                keyboardType: TextInputType.number,
-                maxLength: 6,
-                inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-                style: const TextStyle(
-                    fontSize: 24, letterSpacing: 8, fontWeight: FontWeight.w800),
-                decoration: InputDecoration(
-                  counterText: '',
-                  hintText: '••••',
-                  helperText: order.otpRequired
-                      ? 'Ask the customer for the code in their AquaGas app.'
-                      : 'If the customer has a code, enter it. Otherwise take a photo.',
-                ),
-              ),
-            ),
-            const SizedBox(height: 14),
-
-            // ── Photo ──────────────────────────────────────────────────────
-            _Card(
-              icon: Icons.photo_camera_outlined,
-              title: 'Photo of the delivery',
-              child: Column(
+      body: Column(
+        children: [
+          _buildHeader(order),
+          Expanded(
+            child: SafeArea(
+              top: false,
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 28),
                 children: [
-                  if (_photo != null)
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(12),
-                      child: Image.file(
-                        File(_photo!.path),
-                        height: 180,
-                        width: double.infinity,
-                        fit: BoxFit.cover,
-                      ),
-                    )
-                  else
-                    Container(
-                      height: 110,
-                      width: double.infinity,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: AppColors.background,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.divider),
-                      ),
-                      child: const Text(
-                        'Show the cylinder at the customer\'s door',
-                        style: TextStyle(color: AppColors.textHint),
-                      ),
-                    ),
-                  const SizedBox(height: 10),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton.icon(
-                      onPressed: _submitting ? null : _takePhoto,
-                      icon: Icon(_photo == null
-                          ? Icons.photo_camera_outlined
-                          : Icons.refresh),
-                      label: Text(_photo == null ? 'Take photo' : 'Retake'),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 14),
+                  _buildSummaryCard(order),
+                  const SizedBox(height: 14),
 
-            // ── Cylinder swap ──────────────────────────────────────────────
-            _Card(
-              icon: Icons.swap_horiz_rounded,
-              title: 'Empty cylinders collected',
-              child: Row(
-                children: [
-                  IconButton.outlined(
-                    onPressed: _submitting || _emptyCylinders == 0
-                        ? null
-                        : () => setState(() => _emptyCylinders--),
-                    icon: const Icon(Icons.remove),
-                  ),
-                  Expanded(
-                    child: Text(
-                      '$_emptyCylinders',
-                      textAlign: TextAlign.center,
+                  // ── 1. Payment (the main job at the door) ────────────────
+                  if (order.isCod) ...[
+                    _sectionLabel('Collect payment'),
+                    _buildMpesaCard(order),
+                    if (order.cashlessOnly && !_paidByMpesa) ...[
+                      const SizedBox(height: 10),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECF5EE),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Row(children: [
+                          Icon(Icons.money_off_csred_outlined,
+                              color: Color(0xFF166534)),
+                          SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                                'Do not accept cash. Every delivery is paid by M-Pesa.',
+                                style: TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        ]),
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                  ],
+
+                  // ── 2. Proof ─────────────────────────────────────────────
+                  _sectionLabel('Proof of delivery'),
+                  _Card(
+                    icon: Icons.pin_outlined,
+                    title: order.otpRequired
+                        ? 'Customer delivery code'
+                        : 'Customer delivery code (optional)',
+                    child: TextField(
+                      controller: _otpCtrl,
+                      enabled: !busy,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                       style: const TextStyle(
-                          fontSize: 26, fontWeight: FontWeight.w800),
+                          fontSize: 22,
+                          letterSpacing: 8,
+                          fontWeight: FontWeight.w800),
+                      decoration: InputDecoration(
+                        counterText: '',
+                        hintText: '••••',
+                        helperText: order.otpRequired
+                            ? 'Ask the customer for the code in their AquaGas app.'
+                            : 'If the customer has a code, enter it. Otherwise take a photo.',
+                        helperMaxLines: 2,
+                      ),
                     ),
                   ),
-                  IconButton.outlined(
-                    onPressed: _submitting || _emptyCylinders >= 10
-                        ? null
-                        : () => setState(() => _emptyCylinders++),
-                    icon: const Icon(Icons.add),
+                  const SizedBox(height: 12),
+                  _Card(
+                    icon: Icons.photo_camera_outlined,
+                    title: 'Photo of the delivery',
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: _photo != null
+                              ? Image.file(File(_photo!.path),
+                                  width: 96, height: 96, fit: BoxFit.cover)
+                              : Container(
+                                  width: 96,
+                                  height: 96,
+                                  color: AppColors.background,
+                                  child: const Icon(Icons.image_outlined,
+                                      size: 36, color: AppColors.textHint),
+                                ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              SizedBox(
+                                width: double.infinity,
+                                child: OutlinedButton.icon(
+                                  onPressed: busy ? null : _takePhoto,
+                                  icon: Icon(_photo == null
+                                      ? Icons.photo_camera_outlined
+                                      : Icons.refresh),
+                                  label: Text(
+                                      _photo == null ? 'Take photo' : 'Retake'),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              const Text(
+                                  'Show the cylinder at the customer\'s door',
+                                  style: TextStyle(
+                                      fontSize: 12,
+                                      color: AppColors.textHint)),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  _Card(
+                    icon: Icons.swap_horiz_rounded,
+                    title: 'Empty cylinders collected',
+                    child: Row(
+                      children: [
+                        IconButton.outlined(
+                          onPressed: busy || _emptyCylinders == 0
+                              ? null
+                              : () => setState(() => _emptyCylinders--),
+                          icon: const Icon(Icons.remove),
+                        ),
+                        Expanded(
+                          child: Text('$_emptyCylinders',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(
+                                  fontSize: 24, fontWeight: FontWeight.w800)),
+                        ),
+                        IconButton.outlined(
+                          onPressed: busy || _emptyCylinders >= 10
+                              ? null
+                              : () => setState(() => _emptyCylinders++),
+                          icon: const Icon(Icons.add),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // ── 3. Cash fallback + note, side by side ────────────────
+                  _sectionLabel(showCash ? 'Cash and notes' : 'Notes'),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (showCash) ...[
+                        Expanded(
+                          child: _Card(
+                            icon: Icons.payments_outlined,
+                            title: 'Cash collected',
+                            child: TextField(
+                              controller: _cashCtrl,
+                              enabled: !busy && !_mpesaWaiting,
+                              keyboardType: const TextInputType.numberWithOptions(
+                                  decimal: true),
+                              inputFormatters: [
+                                FilteringTextInputFormatter.allow(
+                                    RegExp(r'[0-9.,]')),
+                              ],
+                              decoration: InputDecoration(
+                                prefixText: 'KES ',
+                                helperText:
+                                    'Due: KES ${order.amountDue.toStringAsFixed(0)}',
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                      ],
+                      Expanded(
+                        child: _Card(
+                          icon: Icons.notes_outlined,
+                          title: 'Note (optional)',
+                          child: TextField(
+                            controller: _noteCtrl,
+                            enabled: !busy,
+                            maxLines: 2,
+                            maxLength: 200,
+                            decoration: const InputDecoration(
+                                hintText: 'Anything support should know'),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (showCash)
+                    const Padding(
+                      padding: EdgeInsets.only(top: 6, left: 4),
+                      child: Text(
+                          'Cash you take is added to what you remit to AquaGas.',
+                          style: TextStyle(
+                              fontSize: 12, color: AppColors.textHint)),
+                    ),
+
+                  if (_error != null) ...[
+                    const SizedBox(height: 12),
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.error.withOpacity(0.08),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Icon(Icons.error_outline,
+                              color: AppColors.error, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(_error!,
+                                style: const TextStyle(
+                                    color: AppColors.error,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 13)),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  const SizedBox(height: 20),
+                  GradientButton(
+                    label: 'Confirm delivery',
+                    icon: Icons.check_circle_outline,
+                    loading: _submitting,
+                    onPressed:
+                        _submitting || _mpesaWaiting ? null : () => _submit(order),
                   ),
                 ],
               ),
             ),
-            const SizedBox(height: 14),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // ── Cash on delivery (cash fallback) ───────────────────────────
-            if (order.isCod && !_paidByMpesa && !order.cashlessOnly) ...[
-              _Card(
-                icon: Icons.payments_outlined,
-                title: 'Cash collected',
+  Widget _sectionLabel(String text) => Padding(
+        padding: const EdgeInsets.only(left: 4, bottom: 8),
+        child: Text(text.toUpperCase(),
+            style: const TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.8,
+                color: AppColors.textSecondary)),
+      );
+
+  Widget _buildHeader(OrderModel order) {
+    return Container(
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [AppColors.primaryDark, AppColors.primary],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 4, 16, 18),
+          child: Row(
+            children: [
+              IconButton(
+                onPressed: () => Navigator.maybePop(context),
+                icon: const Icon(Icons.arrow_back, color: Colors.white),
+              ),
+              const SizedBox(width: 4),
+              const Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      'Amount due: KES ${order.amountDue.toStringAsFixed(0)}',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _cashCtrl,
-                      enabled: !_submitting && !_mpesaWaiting,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      inputFormatters: [
-                        FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-                      ],
-                      decoration: const InputDecoration(
-                        prefixText: 'KES ',
-                        helperText:
-                            'This is added to the cash you must remit to AquaGas.',
-                      ),
-                    ),
+                    Text('Complete delivery',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800)),
+                    SizedBox(height: 2),
+                    Text('Confirm payment, add proof and finish',
+                        style: TextStyle(color: Colors.white70, fontSize: 13)),
                   ],
                 ),
               ),
-              const SizedBox(height: 14),
             ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // ── Note ───────────────────────────────────────────────────────
-            _Card(
-              icon: Icons.notes_outlined,
-              title: 'Note (optional)',
-              child: TextField(
-                controller: _noteCtrl,
-                enabled: !_submitting,
-                maxLines: 2,
-                maxLength: 200,
-                decoration: const InputDecoration(
-                  hintText: 'Anything support should know about this delivery',
+  Widget _buildSummaryCard(OrderModel order) {
+    final arrived = order.riderProgress == 'arrived_customer';
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text('#${order.orderNumber}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 15,
+                        color: AppColors.textPrimary)),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: (arrived ? AppColors.success : AppColors.inTransit)
+                      .withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(arrived ? 'At customer' : 'On delivery',
+                    style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: arrived ? AppColors.success : AppColors.inTransit)),
+              ),
+            ],
+          ),
+          const Divider(height: 22),
+          Row(
+            children: [
+              CircleAvatar(
+                radius: 22,
+                backgroundColor: AppColors.primaryLight,
+                child: Text(
+                  (order.customerName.isNotEmpty ? order.customerName[0] : 'C')
+                      .toUpperCase(),
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, color: AppColors.primaryDark),
                 ),
               ),
-            ),
-
-            if (_error != null) ...[
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppColors.error.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Icon(Icons.error_outline,
-                        color: AppColors.error, size: 18),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _error!,
+                    Text(order.customerName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: const TextStyle(
-                            color: AppColors.error,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 13),
-                      ),
-                    ),
+                            fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text(order.customerPhone,
+                        style: const TextStyle(
+                            color: AppColors.textSecondary, fontSize: 13)),
                   ],
                 ),
               ),
+              if (order.isCod || _paidByMpesa)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(_paidByMpesa ? 'Paid by M-Pesa' : 'To collect',
+                        style: const TextStyle(
+                            fontSize: 12, color: AppColors.textSecondary)),
+                    Text('KES ${order.amountDue.toStringAsFixed(0)}',
+                        style: const TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.primaryDark)),
+                  ],
+                ),
             ],
-
-            const SizedBox(height: 20),
-            GradientButton(
-              label: 'Confirm delivery',
-              icon: Icons.check_circle_outline,
-              loading: _submitting,
-              onPressed: _submitting || _mpesaWaiting ? null : () => _submit(order),
-            ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
