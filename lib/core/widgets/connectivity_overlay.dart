@@ -20,6 +20,8 @@ class _ConnectivityOverlayState extends ConsumerState<ConnectivityOverlay> {
   StreamSubscription? _socketSub;
   bool _showSocketBanner = false;
   Timer? _bannerTimer;
+  Timer? _dropTimer;
+  bool _dropShown = false;
 
   @override
   void initState() {
@@ -29,7 +31,14 @@ class _ConnectivityOverlayState extends ConsumerState<ConnectivityOverlay> {
       setState(() => _socketStatus = status);
 
       if (status == SocketStatus.reconnected) {
-        // Show a brief "reconnected" confirmation then auto-hide
+        // Brief drops (a few seconds) are normal on mobile data: say nothing.
+        _dropTimer?.cancel();
+        _dropTimer = null;
+        if (!_dropShown) {
+          setState(() => _showSocketBanner = false);
+          return;
+        }
+        _dropShown = false;
         setState(() => _showSocketBanner = true);
         _bannerTimer?.cancel();
         _bannerTimer = Timer(const Duration(seconds: 3), () {
@@ -37,8 +46,13 @@ class _ConnectivityOverlayState extends ConsumerState<ConnectivityOverlay> {
         });
       } else if (status == SocketStatus.disconnected ||
           status == SocketStatus.reconnecting) {
-        setState(() => _showSocketBanner = true);
         _bannerTimer?.cancel();
+        _dropTimer ??= Timer(const Duration(seconds: 12), () {
+          _dropTimer = null;
+          if (!mounted) return;
+          _dropShown = true;
+          setState(() => _showSocketBanner = true);
+        });
       }
     });
   }
@@ -47,6 +61,7 @@ class _ConnectivityOverlayState extends ConsumerState<ConnectivityOverlay> {
   void dispose() {
     _socketSub?.cancel();
     _bannerTimer?.cancel();
+    _dropTimer?.cancel();
     super.dispose();
   }
 

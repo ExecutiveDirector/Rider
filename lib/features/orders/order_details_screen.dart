@@ -210,10 +210,10 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             _SectionCard(
               title: 'Order',
               children: [
-                _DetailRow(Icons.local_fire_department_outlined, 'Gas Type',
-                    order.gasType),
-                _DetailRow(
-                    Icons.scale_outlined, 'Quantity', '${order.quantity} kg'),
+                _DetailRow(Icons.local_fire_department_outlined,
+                    order.isGasItem ? 'Gas Type' : 'Item', order.gasType),
+                _DetailRow(Icons.scale_outlined, 'Quantity',
+                    order.isGasItem ? '${order.quantity} kg' : '${order.quantity}'),
                 _DetailRow(Icons.attach_money_outlined, 'Total',
                     'KES ${order.totalAmount.toStringAsFixed(0)}'),
                 if (order.riderEarning != null)
@@ -223,7 +223,9 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                   Icons.payments_outlined,
                   'Payment',
                   order.isCod
-                      ? 'Cash on delivery — collect KES ${order.amountDue.toStringAsFixed(0)}'
+                      ? (order.cashlessOnly
+                          ? 'Pay on delivery — M-Pesa only (KES ${order.amountDue.toStringAsFixed(0)}). Do not take cash.'
+                          : 'Pay on delivery — KES ${order.amountDue.toStringAsFixed(0)} by M-Pesa request (or cash)')
                       : (order.paymentMethod.isEmpty
                           ? 'Not specified'
                           : 'Prepaid (${order.paymentMethod})'),
@@ -359,7 +361,7 @@ class _StatusCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  '${order.quantity} kg cylinder',
+                  order.isGasItem ? '${order.quantity} kg cylinder' : 'Qty: ${order.quantity}',
                   style: TextStyle(color: Colors.white.withOpacity(0.8)),
                 ),
               ],

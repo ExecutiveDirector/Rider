@@ -150,6 +150,10 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
   }
 
   Future<void> _submit(OrderModel order) async {
+    if (order.isCod && order.cashlessOnly && !_paidByMpesa) {
+      setState(() => _error = 'Cash is not accepted. Tap "Request M-Pesa payment" and wait for the customer to pay.');
+      return;
+    }
     final problem = ProofRules.validate(
       order: order,
       otp: _otpCtrl.text,
@@ -251,6 +255,27 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
     Navigator.pop(context, true);
   }
 
+  Widget _buildAmountHeader(OrderModel order) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(_paidByMpesa ? 'Paid by M-Pesa' : 'Amount to collect',
+              style: const TextStyle(fontSize: 15, color: Color(0xFF475569))),
+          Text('KES ${order.amountDue.toStringAsFixed(0)}',
+              style: const TextStyle(
+                  fontSize: 28, fontWeight: FontWeight.w800, color: Color(0xFF064E3B))),
+        ],
+      ),
+    );
+  }
+
   Widget _buildMpesaCard(OrderModel order) {
     final due = 'KES ${order.amountDue.toStringAsFixed(0)}';
     if (_paidByMpesa) {
@@ -337,6 +362,31 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
           children: [
+            // ── Collect payment (first: it is the main job at the door) ────
+            if (order.isCod) ...[
+              _buildAmountHeader(order),
+              const SizedBox(height: 12),
+              _buildMpesaCard(order),
+              if (order.cashlessOnly && !_paidByMpesa) ...[
+                const SizedBox(height: 10),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFECF5EE),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.money_off_csred_outlined, color: Color(0xFF166534)),
+                    SizedBox(width: 10),
+                    Expanded(
+                      child: Text('Do not accept cash. Every delivery is paid by M-Pesa.',
+                          style: TextStyle(fontWeight: FontWeight.w600)),
+                    ),
+                  ]),
+                ),
+              ],
+              const SizedBox(height: 18),
+            ],
             // ── Customer code ──────────────────────────────────────────────
             _Card(
               icon: Icons.pin_outlined,
@@ -440,12 +490,8 @@ class _ProofOfDeliveryScreenState extends ConsumerState<ProofOfDeliveryScreen> {
             ),
             const SizedBox(height: 14),
 
-            // ── Cash on delivery ───────────────────────────────────────────
-            if (order.isCod) ...[
-              _buildMpesaCard(order),
-              const SizedBox(height: 14),
-            ],
-            if (order.isCod && !_paidByMpesa) ...[
+            // ── Cash on delivery (cash fallback) ───────────────────────────
+            if (order.isCod && !_paidByMpesa && !order.cashlessOnly) ...[
               _Card(
                 icon: Icons.payments_outlined,
                 title: 'Cash collected',
