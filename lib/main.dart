@@ -19,7 +19,11 @@ Future<void> main() async {
   // Never sends personal data, screenshots or performance traces.
   try {
     await SentryFlutter.init((o) {
-      o.dsn = const String.fromEnvironment('SENTRY_DSN');
+      // A Sentry DSN only lets clients send events (it is not a secret);
+      // a build can still override it with --dart-define=SENTRY_DSN=...
+      o.dsn = const String.fromEnvironment('SENTRY_DSN',
+          defaultValue:
+              'https://140b851a0b9901e6a9674273921fa5e5@o4512316675588096.ingest.de.sentry.io/4512317082566736');
       o.environment = const String.fromEnvironment('APP_ENV', defaultValue: 'production');
       o.sendDefaultPii = false;
       o.attachScreenshot = false;
