@@ -75,9 +75,9 @@ class CashNotifier extends StateNotifier<CashState> {
   }
 
   /// Returns null on success, otherwise a message for the rider.
-  Future<String?> requestPayout(double amount) async {
+  Future<String?> requestPayout(PayoutRequest request) async {
     try {
-      await _repo.requestPayout(amount);
+      await _repo.requestPayout(request);
       await load();
       return null;
     } catch (e) {

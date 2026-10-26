@@ -54,7 +54,7 @@ class CashRepository {
   }
 
   /// Ask for [amount] of earned money to be sent to the rider's M-Pesa.
-  Future<void> requestPayout(double amount) async {
-    await _api.post(ApiConstants.payoutRequest, data: {'amount': amount});
+  Future<void> requestPayout(PayoutRequest request) async {
+    await _api.post(ApiConstants.payoutRequest, data: request.toJson());
   }
 }
