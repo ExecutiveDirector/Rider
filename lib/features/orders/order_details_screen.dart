@@ -7,6 +7,7 @@ import '../../core/widgets/gradient_button.dart';
 import '../../core/config/routes.dart';
 import '../../data/providers/order_provider.dart';
 import '../../data/models/order_model.dart';
+import '../chat/order_chat_screen.dart';
 
 class OrderDetailsScreen extends ConsumerStatefulWidget {
   final String orderId;
@@ -241,6 +242,21 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
                   context,
                   AppRoutes.liveTracking,
                   arguments: order.id,
+                ),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size.fromHeight(52),
+                ),
+              ),
+              const SizedBox(height: 12),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.chat_bubble_outline),
+                label: const Text('Chat with Customer'),
+                onPressed: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => OrderChatScreen(
+                        orderId: order.id, orderNumber: order.orderNumber),
+                  ),
                 ),
                 style: OutlinedButton.styleFrom(
                   minimumSize: const Size.fromHeight(52),
