@@ -38,7 +38,7 @@ class DriverModel {
         '${json['first_name'] ?? ''} ${json['last_name'] ?? ''}'.trim();
 
     // ID: login sends rider.id (= rider_id); profile sends rider_id directly.
-    final int id = (json['id'] ?? json['rider_id'] ?? 0) as int;
+    final int id = _asInt(json['id'] ?? json['rider_id']);
 
     // Phone: prefer E.164 number from auth_accounts, fall back to riders.phone.
     final String phone = account?['phone_number'] as String? ??
@@ -62,16 +62,23 @@ class DriverModel {
       vehiclePlate: json['vehiclePlate'] as String? ??
           json['vehicle_plate'] as String? ??
           json['vehicle_registration'] as String?,
-      isOnline:
-          json['isOnline'] as bool? ?? json['is_online'] as bool? ?? false,
-      isVerified:
-          json['isVerified'] as bool? ?? json['is_verified'] as bool? ?? false,
-      rating: ((json['rating'] ?? 0) as num).toDouble(),
-      totalDeliveries: json['totalDeliveries'] as int? ??
-          json['total_deliveries'] as int? ??
-          0,
+      isOnline: _asBool(json['isOnline'] ?? json['is_online']),
+      isVerified: _asBool(json['isVerified'] ?? json['is_verified']),
+      // MySQL DECIMAL arrives as a string ("4.50"); a hard cast threw and
+      // silently dropped the whole profile, leaving a signed-in rider with no data.
+      rating: _asDouble(json['rating']),
+      totalDeliveries: _asInt(json['totalDeliveries'] ?? json['total_deliveries']),
     );
   }
+
+  static bool _asBool(Object? v) =>
+      v is bool ? v : (v is num ? v != 0 : '${v ?? ''}' == 'true' || '${v ?? ''}' == '1');
+
+  static int _asInt(Object? v) =>
+      v is num ? v.toInt() : int.tryParse('${v ?? ''}') ?? 0;
+
+  static double _asDouble(Object? v) =>
+      v is num ? v.toDouble() : double.tryParse('${v ?? ''}') ?? 0.0;
 
   Map<String, dynamic> toJson() => {
         'id': id,
