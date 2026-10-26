@@ -60,15 +60,17 @@ class _CashPayoutsScreenState extends ConsumerState<CashPayoutsScreen> {
   }
 
   Future<void> _requestPayout(double available) async {
-    final amount = await showDialog<double>(
+    final request = await showDialog<PayoutRequest>(
       context: context,
       builder: (_) => _PayoutDialog(available: available),
     );
-    if (amount == null || !mounted) return;
+    if (request == null || !mounted) return;
 
-    final err = await ref.read(cashProvider.notifier).requestPayout(amount);
+    final err = await ref.read(cashProvider.notifier).requestPayout(request);
     err == null
-        ? _toast('Payout requested. It will be sent to your M-Pesa.')
+        ? _toast(request.bank
+            ? 'Withdrawal requested. Once approved it is paid to your bank account.'
+            : 'Withdrawal requested. Once approved it is sent to your M-Pesa.')
         : _toast(err, error: true);
   }
 
@@ -601,6 +603,11 @@ class _PayoutDialog extends StatefulWidget {
 
 class _PayoutDialogState extends State<_PayoutDialog> {
   late final TextEditingController _ctrl;
+  final _phone = TextEditingController();
+  final _bankName = TextEditingController();
+  final _account = TextEditingController();
+  final _holder = TextEditingController();
+  bool _bank = false;
   String? _error;
 
   @override
@@ -612,6 +619,10 @@ class _PayoutDialogState extends State<_PayoutDialog> {
   @override
   void dispose() {
     _ctrl.dispose();
+    _phone.dispose();
+    _bankName.dispose();
+    _account.dispose();
+    _holder.dispose();
     super.dispose();
   }
 
@@ -624,41 +635,88 @@ class _PayoutDialogState extends State<_PayoutDialog> {
       return setState(
           () => _error = 'You can withdraw up to ${_kes(widget.available)}.');
     }
-    Navigator.pop(context, amount);
+    if (_bank &&
+        (_bankName.text.trim().length < 2 ||
+            _account.text.trim().length < 6 ||
+            _holder.text.trim().length < 3)) {
+      return setState(() => _error = 'Fill in the bank, account number and account name.');
+    }
+    Navigator.pop(
+      context,
+      PayoutRequest(
+        amount: amount,
+        bank: _bank,
+        mpesaPhone: _phone.text.trim(),
+        bankName: _bankName.text.trim(),
+        bankAccountNumber: _account.text.trim(),
+        bankAccountName: _holder.text.trim(),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Withdraw earnings'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('Sent to the M-Pesa number on your profile.',
-              style: const TextStyle(
-                  color: AppColors.textSecondary, fontSize: 13)),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _ctrl,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            inputFormatters: [
-              FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]')),
-            ],
-            decoration: InputDecoration(
-              labelText: 'Amount',
-              prefixText: 'KES ',
-              helperText: 'Available ${_kes(widget.available)}',
-              errorText: _error,
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('An admin approves the request, then it is paid to the account you choose.',
+                style: TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+            const SizedBox(height: 12),
+            SegmentedButton<bool>(
+              segments: const [
+                ButtonSegment(value: false, label: Text('M-Pesa'), icon: Icon(Icons.phone_android)),
+                ButtonSegment(value: true, label: Text('Bank'), icon: Icon(Icons.account_balance)),
+              ],
+              selected: {_bank},
+              onSelectionChanged: (s) => setState(() {
+                _bank = s.first;
+                _error = null;
+              }),
             ),
-          ),
-        ],
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ctrl,
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+              inputFormatters: [FilteringTextInputFormatter.allow(RegExp(r'[0-9.,]'))],
+              decoration: InputDecoration(
+                labelText: 'Amount',
+                prefixText: 'KES ',
+                helperText: 'Available ${_kes(widget.available)}',
+              ),
+            ),
+            const SizedBox(height: 8),
+            if (!_bank)
+              TextField(
+                controller: _phone,
+                keyboardType: TextInputType.phone,
+                decoration: const InputDecoration(
+                  labelText: 'M-Pesa number (optional)',
+                  helperText: 'Leave empty to use the number on your profile',
+                ),
+              )
+            else ...[
+              TextField(controller: _bankName, decoration: const InputDecoration(labelText: 'Bank name')),
+              TextField(
+                controller: _account,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(labelText: 'Account number'),
+              ),
+              TextField(controller: _holder, decoration: const InputDecoration(labelText: 'Account name')),
+            ],
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: const TextStyle(color: Colors.red, fontSize: 12)),
+            ],
+          ],
+        ),
       ),
       actions: [
-        TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Withdraw')),
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(onPressed: _submit, child: const Text('Request')),
       ],
     );
   }

@@ -127,3 +127,31 @@ class PayoutModel {
     );
   }
 }
+
+/// A withdrawal request: how much, and where to pay it (M-Pesa number or bank account).
+class PayoutRequest {
+  final double amount;
+  final bool bank;
+  final String mpesaPhone;
+  final String bankName;
+  final String bankAccountNumber;
+  final String bankAccountName;
+
+  const PayoutRequest({
+    required this.amount,
+    this.bank = false,
+    this.mpesaPhone = '',
+    this.bankName = '',
+    this.bankAccountNumber = '',
+    this.bankAccountName = '',
+  });
+
+  Map<String, dynamic> toJson() => {
+        'amount': amount,
+        'method': bank ? 'bank_transfer' : 'mpesa',
+        if (!bank && mpesaPhone.isNotEmpty) 'mpesa_phone': mpesaPhone,
+        if (bank) 'bank_name': bankName,
+        if (bank) 'bank_account_number': bankAccountNumber,
+        if (bank) 'bank_account_name': bankAccountName,
+      };
+}
