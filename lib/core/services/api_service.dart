@@ -115,7 +115,16 @@ class _AuthInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) async {
     final isAuthCall = err.requestOptions.path.contains(ApiConstants.refreshToken) ||
         err.requestOptions.path.contains('/login');
-    if (err.response?.statusCode == 401 &&
+    // The backend answers a stale/invalid access token with 403 'Invalid or
+    // expired token' (and 401 when the header is missing), so treat both as
+    // "try to refresh, else go to login". Other 403s (real permission
+    // errors) are left alone.
+    final status = err.response?.statusCode;
+    final body = err.response?.data;
+    final msg = body is Map ? '${body['message'] ?? body['error'] ?? ''}' : '';
+    final tokenRejected = status == 401 ||
+        (status == 403 && msg.toLowerCase().contains('token'));
+    if (tokenRejected &&
         !isAuthCall &&
         err.requestOptions.extra['retried'] != true) {
       final newToken =
