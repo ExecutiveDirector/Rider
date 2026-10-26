@@ -293,6 +293,13 @@ class _PayoutCard extends StatelessWidget {
                     letterSpacing: -0.5,
                   ),
                 ),
+                if (available <= 0) ...[
+                  const SizedBox(height: 6),
+                  const Text(
+                    'Earnings from delivered orders appear here. Minimum withdrawal is KES 100.',
+                    style: TextStyle(color: Colors.white70, fontSize: 12),
+                  ),
+                ],
               ],
             ),
           ),

@@ -165,6 +165,23 @@ class _EarningsScreenState extends ConsumerState<EarningsScreen> {
               ),
             ),
 
+            // Withdraw shortcut: the full screen lives under Cash & payouts.
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                child: FilledButton.icon(
+                  icon: const Icon(Icons.account_balance_wallet_outlined),
+                  label: Text(
+                      'Withdraw earnings · KES ${(summary?.pendingPayout ?? 0).toStringAsFixed(0)} available'),
+                  style: FilledButton.styleFrom(
+                    minimumSize: const Size.fromHeight(50),
+                  ),
+                  onPressed: () =>
+                      Navigator.pushNamed(context, AppRoutes.cashPayouts),
+                ),
+              ),
+            ),
+
             // Deliveries stat row
             SliverToBoxAdapter(
               child: Padding(
