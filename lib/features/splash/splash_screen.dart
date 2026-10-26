@@ -57,6 +57,7 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
         // populated lazily when screens request it.
       }
 
+      // Read after the profile call: it may have refreshed the access token.
       final token = await StorageService.instance.getToken();
       final driverId = await StorageService.instance.getDriverId();
 
