@@ -38,15 +38,31 @@ class _DemandMapScreenState extends ConsumerState<DemandMapScreen> {
           _center = LatLng(p.latitude, p.longitude);
           _located = true;
         });
-        if (_mapReady) _map.move(_center, _map.camera.zoom);
+        if (_mapReady) {
+          try {
+            _map.move(_center, _map.camera.zoom);
+          } catch (_) {
+            // Map not attached yet; the initial center already covers it.
+          }
+        }
       }
     } catch (_) {
       // Stay on the Nairobi default.
     }
   }
 
+  // Skip any zone with unusable coordinates/size so one bad row from the
+  // server can never take the whole screen down.
+  bool _valid(DemandZone z) =>
+      z.latitude.isFinite &&
+      z.longitude.isFinite &&
+      z.radiusM.isFinite &&
+      z.radiusM > 0 &&
+      z.latitude.abs() <= 90 &&
+      z.longitude.abs() <= 180;
+
   List<CircleMarker> _circles(List<DemandZone> zones) => [
-        for (final z in zones)
+        for (final z in zones.where(_valid))
           CircleMarker(
             point: LatLng(z.latitude, z.longitude),
             radius: z.radiusM,
