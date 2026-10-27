@@ -21,11 +21,22 @@ class CashPayoutsScreen extends ConsumerStatefulWidget {
   ConsumerState<CashPayoutsScreen> createState() => _CashPayoutsScreenState();
 }
 
-class _CashPayoutsScreenState extends ConsumerState<CashPayoutsScreen> {
+class _CashPayoutsScreenState extends ConsumerState<CashPayoutsScreen>
+    with SingleTickerProviderStateMixin {
+  // Two tabs keep "my money" (earnings to withdraw) apart from "AquaGas's
+  // money" (cash collected on delivery that must be handed in).
+  late final TabController _tabs = TabController(length: 2, vsync: this);
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) => _refresh());
+  }
+
+  @override
+  void dispose() {
+    _tabs.dispose();
+    super.dispose();
   }
 
   Future<void> _refresh() async {
@@ -74,69 +85,143 @@ class _CashPayoutsScreenState extends ConsumerState<CashPayoutsScreen> {
         : _toast(err, error: true);
   }
 
+  Widget _scrollTab(List<Widget> children, {double top = 16}) =>
+      RefreshIndicator(
+        color: AppColors.primary,
+        onRefresh: _refresh,
+        child: ListView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: EdgeInsets.fromLTRB(20, top, 20, 32),
+          children: children,
+        ),
+      );
+
   @override
   Widget build(BuildContext context) {
     final cash = ref.watch(cashProvider);
     final available = ref.watch(earningsProvider).summary?.pendingPayout ?? 0;
     final summary = cash.summary;
+    final toRemit = summary?.cashInHand ?? 0;
+    final overLimit = summary?.overLimit ?? false;
+
+    Widget body;
+    if (cash.isLoading && summary == null && cash.payouts.isEmpty) {
+      body = const Center(
+        child: CircularProgressIndicator(color: AppColors.primary),
+      );
+    } else if (cash.error != null && summary == null && cash.payouts.isEmpty) {
+      body = _scrollTab([
+        AppEmptyState(
+          icon: Icons.error_outline_rounded,
+          title: 'Could not load',
+          message: cash.error!,
+          iconColor: AppColors.error,
+          actionLabel: 'Retry',
+          onAction: _refresh,
+        ),
+      ], top: 70);
+    } else {
+      body = TabBarView(
+        controller: _tabs,
+        children: [
+          // ── My earnings: withdraw + history ───────────────────────────
+          _scrollTab([
+            _WithdrawHero(
+              available: available,
+              onWithdraw: available > 0 && !overLimit
+                  ? () => _requestPayout(available)
+                  : null,
+            ),
+            if (overLimit) ...[
+              const SizedBox(height: 12),
+              _Banner(
+                icon: Icons.lock_outline_rounded,
+                color: AppColors.warning,
+                text:
+                    'Withdrawals are paused until you hand in the cash you are carrying (you are over your limit).',
+                actionLabel: 'Hand in cash',
+                onAction: () => _tabs.animateTo(1),
+              ),
+            ],
+            const SizedBox(height: 20),
+            const _HowItWorks(),
+            const SizedBox(height: 24),
+            const _SectionTitle('Withdrawal history'),
+            if (cash.payouts.isEmpty)
+              const _EmptyHint(
+                icon: Icons.receipt_long_outlined,
+                text:
+                    'No withdrawals yet. Your requests and their status will show here.',
+              )
+            else
+              ...cash.payouts.map((p) => _PayoutTile(payout: p)),
+          ]),
+
+          // ── Cash to remit: COD cash that belongs to AquaGas ───────────
+          _scrollTab([
+            if (summary != null) ...[
+              _CashCard(summary: summary, onRemit: () => _remit(summary)),
+              const SizedBox(height: 12),
+              const _Notice(
+                icon: Icons.info_outline,
+                text:
+                    'Send the cash to AquaGas by M-Pesa, then enter the amount and the confirmation code. Finance confirms it once the code matches.',
+              ),
+              const SizedBox(height: 24),
+              const _SectionTitle('Cash collected'),
+              if (summary.collections.isEmpty)
+                const _EmptyHint(
+                  icon: Icons.payments_outlined,
+                  text:
+                      'No cash collected yet. Cash-on-delivery payments you take will be listed here.',
+                )
+              else
+                ...summary.collections.map((c) => _CollectionTile(item: c)),
+            ] else
+              const _Notice(
+                icon: Icons.info_outline,
+                text: 'Cash tracking is not available for your account yet.',
+              ),
+          ]),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: AppColors.background,
-      appBar: AppBar(title: const Text('Cash & payouts')),
-      body: RefreshIndicator(
-        color: AppColors.primary,
-        onRefresh: _refresh,
-        child: Builder(builder: (context) {
-          if (cash.isLoading && summary == null && cash.payouts.isEmpty) {
-            return const Center(
-              child: CircularProgressIndicator(color: AppColors.primary),
-            );
-          }
-          if (cash.error != null && summary == null && cash.payouts.isEmpty) {
-            return ListView(
-              padding: const EdgeInsets.only(top: 70),
-              children: [
-                AppEmptyState(
-                  icon: Icons.error_outline_rounded,
-                  title: 'Could not load',
-                  message: cash.error!,
-                  iconColor: AppColors.error,
-                  actionLabel: 'Retry',
-                  onAction: _refresh,
-                ),
-              ],
-            );
-          }
-
-          return ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
-            children: [
-              if (summary != null)
-                _CashCard(summary: summary, onRemit: () => _remit(summary))
-              else
-                const _Notice(
-                  icon: Icons.info_outline,
-                  text: 'Cash tracking is not available for your account yet.',
-                ),
-              const SizedBox(height: 16),
-              _PayoutCard(
-                available: available,
-                onRequest: available > 0 ? () => _requestPayout(available) : null,
+      appBar: AppBar(
+        title: const Text('Cash & payouts'),
+        bottom: TabBar(
+          controller: _tabs,
+          labelColor: AppColors.primary,
+          unselectedLabelColor: AppColors.textSecondary,
+          indicatorColor: AppColors.primary,
+          labelStyle: const TextStyle(fontWeight: FontWeight.w700),
+          tabs: [
+            const Tab(text: 'My earnings'),
+            Tab(
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('Cash to remit'),
+                  if (toRemit > 0) ...[
+                    const SizedBox(width: 6),
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: overLimit ? AppColors.error : AppColors.warning,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
+                ],
               ),
-              if (cash.payouts.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                const _SectionTitle('Payout history'),
-                ...cash.payouts.map((p) => _PayoutTile(payout: p)),
-              ],
-              if (summary != null && summary.collections.isNotEmpty) ...[
-                const SizedBox(height: 24),
-                const _SectionTitle('Cash collected'),
-                ...summary.collections.map((c) => _CollectionTile(item: c)),
-              ],
-            ],
-          );
-        }),
+            ),
+          ],
+        ),
       ),
+      body: body,
     );
   }
 }
@@ -262,61 +347,269 @@ class _Mini extends StatelessWidget {
 
 // ─── Payout ──────────────────────────────────────────────────────────────────
 
-class _PayoutCard extends StatelessWidget {
+class _WithdrawHero extends StatelessWidget {
   final double available;
-  final VoidCallback? onRequest;
-  const _PayoutCard({required this.available, required this.onRequest});
+  final VoidCallback? onWithdraw;
+  const _WithdrawHero({required this.available, required this.onWithdraw});
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(22),
       decoration: BoxDecoration(
         gradient: AppColors.heroGradient,
-        borderRadius: BorderRadius.circular(18),
+        borderRadius: BorderRadius.circular(22),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primaryDark.withOpacity(0.25),
+            blurRadius: 18,
+            offset: const Offset(0, 8),
+          ),
+        ],
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('Available to withdraw',
-                    style: TextStyle(color: Colors.white70, fontSize: 13)),
-                const SizedBox(height: 4),
-                Text(
-                  _kes(available),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.5,
-                  ),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(7),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.18),
+                  shape: BoxShape.circle,
                 ),
-                if (available <= 0) ...[
-                  const SizedBox(height: 6),
-                  const Text(
-                    'Earnings from delivered orders appear here. Minimum withdrawal is KES 100.',
-                    style: TextStyle(color: Colors.white70, fontSize: 12),
-                  ),
-                ],
-              ],
+                child: const Icon(Icons.account_balance_wallet_outlined,
+                    color: Colors.white, size: 18),
+              ),
+              const SizedBox(width: 10),
+              const Text('Available to withdraw',
+                  style: TextStyle(color: Colors.white70, fontSize: 14)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                _kes(available),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 40,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -1,
+                ),
+              ),
             ),
           ),
-          FilledButton(
-            onPressed: onRequest,
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.white,
-              foregroundColor: AppColors.primaryDark,
-              disabledBackgroundColor: Colors.white24,
-              disabledForegroundColor: Colors.white54,
+          const SizedBox(height: 4),
+          Text(
+            available > 0
+                ? 'Ready to send to your M-Pesa or bank.'
+                : 'Earnings from delivered orders show up here.',
+            style: const TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(height: 18),
+          SizedBox(
+            width: double.infinity,
+            child: FilledButton.icon(
+              onPressed: onWithdraw,
+              icon: const Icon(Icons.south_west_rounded, size: 20),
+              label: const Text('Withdraw earnings'),
+              style: FilledButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: AppColors.primaryDark,
+                disabledBackgroundColor: Colors.white24,
+                disabledForegroundColor: Colors.white70,
+                minimumSize: const Size.fromHeight(52),
+                textStyle:
+                    const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+              ),
             ),
-            child: const Text('Withdraw'),
+          ),
+          const SizedBox(height: 14),
+          const Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _HeroChip(icon: Icons.flag_outlined, text: 'Min. KES 100'),
+              _HeroChip(icon: Icons.phone_android, text: 'M-Pesa or bank'),
+              _HeroChip(icon: Icons.verified_outlined, text: 'Admin approves'),
+            ],
           ),
         ],
       ),
     );
   }
+}
+
+class _HeroChip extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _HeroChip({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.16),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: Colors.white),
+            const SizedBox(width: 5),
+            Text(text,
+                style: const TextStyle(color: Colors.white, fontSize: 11.5)),
+          ],
+        ),
+      );
+}
+
+/// Three-step explainer so riders know what happens after tapping Withdraw.
+class _HowItWorks extends StatelessWidget {
+  const _HowItWorks();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget step(IconData icon, String title, String body) => Expanded(
+          child: Column(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                decoration: const BoxDecoration(
+                  color: AppColors.primaryLight,
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: AppColors.primaryDark, size: 22),
+              ),
+              const SizedBox(height: 8),
+              Text(title,
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                      color: AppColors.textPrimary)),
+              const SizedBox(height: 2),
+              Text(body,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                      color: AppColors.textSecondary, fontSize: 11.5)),
+            ],
+          ),
+        );
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: AppColors.surface,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: AppColors.divider),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('How withdrawing works',
+              style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.textPrimary)),
+          const SizedBox(height: 14),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              step(Icons.touch_app_outlined, '1. Request',
+                  'Pick the amount and where to send it'),
+              step(Icons.fact_check_outlined, '2. Approval',
+                  'An admin reviews your request'),
+              step(Icons.payments_outlined, '3. Paid',
+                  'Money lands in your M-Pesa or bank'),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  final String text;
+  final String actionLabel;
+  final VoidCallback onAction;
+  const _Banner({
+    required this.icon,
+    required this.color,
+    required this.text,
+    required this.actionLabel,
+    required this.onAction,
+  });
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: color.withOpacity(0.4)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(text,
+                      style: const TextStyle(
+                          color: AppColors.textPrimary, fontSize: 13)),
+                  const SizedBox(height: 6),
+                  GestureDetector(
+                    onTap: onAction,
+                    child: Text(actionLabel,
+                        style: TextStyle(
+                            color: color,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 13)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+}
+
+class _EmptyHint extends StatelessWidget {
+  final IconData icon;
+  final String text;
+  const _EmptyHint({required this.icon, required this.text});
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 26),
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppColors.divider),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, size: 30, color: AppColors.textHint),
+            const SizedBox(height: 8),
+            Text(text,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                    color: AppColors.textSecondary, fontSize: 13)),
+          ],
+        ),
+      );
 }
 
 class _PayoutTile extends StatelessWidget {
@@ -333,8 +626,10 @@ class _PayoutTile extends StatelessWidget {
     final label = payout.isPaid
         ? 'Paid'
         : payout.isFailed
-            ? 'Failed'
-            : 'Processing';
+            ? 'Rejected'
+            : payout.status == 'pending'
+                ? 'Awaiting approval'
+                : 'Processing';
 
     return _TileShell(
       leading: Icons.arrow_downward_rounded,
@@ -594,7 +889,10 @@ class _RemitDialogState extends State<_RemitDialog> {
         TextButton(
             onPressed: () => Navigator.pop(context),
             child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Submit')),
+        FilledButton(
+            onPressed: _submit,
+            style: FilledButton.styleFrom(minimumSize: const Size(96, 44)),
+            child: const Text('Submit')),
       ],
     );
   }
@@ -723,7 +1021,10 @@ class _PayoutDialogState extends State<_PayoutDialog> {
       ),
       actions: [
         TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
-        FilledButton(onPressed: _submit, child: const Text('Request')),
+        FilledButton(
+            onPressed: _submit,
+            style: FilledButton.styleFrom(minimumSize: const Size(96, 44)),
+            child: const Text('Request')),
       ],
     );
   }
