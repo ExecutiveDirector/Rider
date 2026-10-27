@@ -54,9 +54,12 @@ class ApiConstants {
   static const String supportTickets = '/support/tickets';
   static const String supportFaq = '/support/faq';
 
-  static const String directionsApiKey = String.fromEnvironment(
-    'DIRECTIONS_API_KEY',
-    defaultValue: '',
+  /// Free OSRM routing (no key). The public demo server is fine for launch
+  /// volumes; point ROUTING_BASE_URL at your own OSRM / OpenRouteService
+  /// instance via --dart-define when traffic grows.
+  static const String routingBaseUrl = String.fromEnvironment(
+    'ROUTING_BASE_URL',
+    defaultValue: 'https://router.project-osrm.org',
   );
 
   static const int connectTimeout = 30000;
