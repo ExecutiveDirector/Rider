@@ -51,6 +51,84 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
     }
   }
 
+  /// Where the rider is in the job: 0..6 (6 = ready to complete delivery).
+  int _stepIndex(OrderModel order) {
+    final p = order.riderProgress;
+    if (order.status == OrderStatus.accepted) {
+      if (p == 'arrived_pickup') return 2;
+      if (p == 'en_route_pickup') return 1;
+      return 0;
+    }
+    if (p == 'arrived_customer') return 5;
+    if (p == 'en_route_delivery') return 4;
+    return 3;
+  }
+
+  Widget _buildStepProgress(OrderModel order) {
+    final done = _stepIndex(order);
+    return Row(
+      children: List.generate(6, (i) {
+        return Expanded(
+          child: Container(
+            height: 5,
+            margin: EdgeInsets.only(right: i == 5 ? 0 : 4),
+            decoration: BoxDecoration(
+              color: i <= done ? AppColors.primary : AppColors.divider,
+              borderRadius: BorderRadius.circular(3),
+            ),
+          ),
+        );
+      }),
+    );
+  }
+
+  /// The single button for the rider's next step. Tapping it moves the order on.
+  Widget _buildNextAction(OrderModel order) {
+    final step = _stepIndex(order);
+    const labels = [
+      'On my way to the vendor',
+      'Arrived at the vendor',
+      'Confirm pickup',
+      'On my way to the customer',
+      'Arrived at the customer',
+      'Complete delivery',
+    ];
+    const icons = [
+      Icons.directions_bike_outlined,
+      Icons.storefront_outlined,
+      Icons.inventory_2_outlined,
+      Icons.directions_bike_outlined,
+      Icons.place_outlined,
+      Icons.check_circle_outline,
+    ];
+    VoidCallback? action;
+    switch (step) {
+      case 0:
+        action = () => _sendStep(order.id, 'en_route_pickup');
+        break;
+      case 1:
+        action = () => _sendStep(order.id, 'arrived_pickup');
+        break;
+      case 2:
+        action = () => _confirmPickup(order.id);
+        break;
+      case 3:
+        action = () => _sendStep(order.id, 'en_route_delivery');
+        break;
+      case 4:
+        action = () => _sendStep(order.id, 'arrived_customer');
+        break;
+      default:
+        action = () => _deliverOrder(order.id);
+    }
+    return GradientButton(
+      icon: icons[step],
+      label: labels[step],
+      loading: _isCompleting,
+      onPressed: _isCompleting ? null : action,
+    );
+  }
+
   Future<void> _confirmPickup(String orderId) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -235,95 +313,45 @@ class _OrderDetailsScreenState extends ConsumerState<OrderDetailsScreen> {
             ),
             const SizedBox(height: 32),
             if (isActive) ...[
-              OutlinedButton.icon(
-                icon: const Icon(Icons.map_outlined),
-                label: const Text('Open Live Tracking'),
-                onPressed: () => Navigator.pushNamed(
-                  context,
-                  AppRoutes.liveTracking,
-                  arguments: order.id,
-                ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
-                ),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                icon: const Icon(Icons.chat_bubble_outline),
-                label: const Text('Chat with Customer'),
-                onPressed: () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => OrderChatScreen(
-                        orderId: order.id, orderNumber: order.orderNumber),
+              // Track and chat sit side by side; one big button always shows the
+              // next step and moves the order forward when tapped.
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.map_outlined, size: 20),
+                      label: const Text('Track'),
+                      onPressed: () => Navigator.pushNamed(
+                        context,
+                        AppRoutes.liveTracking,
+                        arguments: order.id,
+                      ),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48)),
+                    ),
                   ),
-                ),
-                style: OutlinedButton.styleFrom(
-                  minimumSize: const Size.fromHeight(52),
-                ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      icon: const Icon(Icons.chat_bubble_outline, size: 20),
+                      label: const Text('Chat'),
+                      onPressed: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => OrderChatScreen(
+                              orderId: order.id, orderNumber: order.orderNumber),
+                        ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                          minimumSize: const Size.fromHeight(48)),
+                    ),
+                  ),
+                ],
               ),
+              const SizedBox(height: 16),
+              _buildStepProgress(order),
               const SizedBox(height: 12),
-              // Pickup comes first; the delivery can only be completed once
-              // the cylinder is actually on the bike.
-              // Journey steps: let admin and the customer follow the rider.
-              if (order.status == OrderStatus.accepted &&
-                  order.riderProgress != 'arrived_pickup') ...[
-                OutlinedButton.icon(
-                  icon: Icon(order.riderProgress == 'en_route_pickup'
-                      ? Icons.place_outlined
-                      : Icons.directions_bike_outlined),
-                  label: Text(order.riderProgress == 'en_route_pickup'
-                      ? "I've arrived at the vendor"
-                      : "I'm on my way to the vendor"),
-                  onPressed: _isCompleting
-                      ? null
-                      : () => _sendStep(
-                          order.id,
-                          order.riderProgress == 'en_route_pickup'
-                              ? 'arrived_pickup'
-                              : 'en_route_pickup'),
-                  style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48)),
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (order.status == OrderStatus.inTransit &&
-                  order.riderProgress != 'arrived_customer') ...[
-                OutlinedButton.icon(
-                  icon: Icon(order.riderProgress == 'en_route_delivery'
-                      ? Icons.place_outlined
-                      : Icons.directions_bike_outlined),
-                  label: Text(order.riderProgress == 'en_route_delivery'
-                      ? "I've arrived at the customer"
-                      : "I'm on my way to the customer"),
-                  onPressed: _isCompleting
-                      ? null
-                      : () => _sendStep(
-                          order.id,
-                          order.riderProgress == 'en_route_delivery'
-                              ? 'arrived_customer'
-                              : 'en_route_delivery'),
-                  style: OutlinedButton.styleFrom(
-                      minimumSize: const Size.fromHeight(48)),
-                ),
-                const SizedBox(height: 12),
-              ],
-              if (order.status == OrderStatus.accepted)
-                GradientButton(
-                  icon: Icons.inventory_2_outlined,
-                  label: 'Confirm Pickup',
-                  loading: _isCompleting,
-                  onPressed:
-                      _isCompleting ? null : () => _confirmPickup(order.id),
-                )
-              else if (order.status == OrderStatus.inTransit)
-                GradientButton(
-                  icon: Icons.check_circle_outline,
-                  label: 'Complete Delivery',
-                  loading: _isCompleting,
-                  onPressed:
-                      _isCompleting ? null : () => _deliverOrder(order.id),
-                ),
+              _buildNextAction(order),
             ],
           ],
         ),
