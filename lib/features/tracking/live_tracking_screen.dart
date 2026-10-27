@@ -2,10 +2,11 @@
 import 'safety_sheet.dart';
 import 'order_problem_sheet.dart';
 import '../chat/order_chat_screen.dart';
-import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/config/routes.dart';
 import '../../core/constants/app_colors.dart';
 import '../../core/utils/navigation_launcher.dart';
@@ -60,8 +61,8 @@ class LiveTrackingScreen extends ConsumerStatefulWidget {
 }
 
 class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
-  final Completer<GoogleMapController> _mapCompleter = Completer();
-  GoogleMapController? _mapController;
+  final MapController _map = MapController();
+  bool _mapReady = false;
   bool _busy = false;
 
   static const _defaultPosition = LatLng(-1.2921, 36.8219); // Nairobi
@@ -87,7 +88,7 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     _tracking.stopTracking();
     // A stale route/ETA from this delivery must not leak into the next one.
     _directions.clear();
-    _mapController?.dispose();
+    _map.dispose();
     super.dispose();
   }
 
@@ -100,7 +101,9 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
   }
 
   void _animateCameraToPosition(LatLng pos) {
-    _mapController?.animateCamera(CameraUpdate.newLatLng(pos));
+    // The controller only works once the map has been laid out.
+    if (!_mapReady) return;
+    _map.move(pos, _map.camera.zoom);
   }
 
   void _toast(String message, {bool error = false}) {
@@ -162,60 +165,56 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
     if (done == true && mounted) Navigator.pop(context);
   }
 
-  Set<Marker> _buildMarkers(
+  List<Marker> _buildMarkers(
       TrackingState tracking, OrderModel? order, _Target? target) {
-    final markers = <Marker>{};
+    final markers = <Marker>[];
 
     // "You are here" stays the universal map-blue every rider already reads
     // instantly — brand color goes on the chrome and route instead.
     if (tracking.currentPosition != null) {
       markers.add(Marker(
-        markerId: const MarkerId('rider'),
-        position: tracking.currentPosition!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        rotation: tracking.heading ?? 0,
-        flat: true,
-        anchor: const Offset(0.5, 0.5),
-        infoWindow: const InfoWindow(title: 'You'),
+        point: tracking.currentPosition!,
+        width: 44,
+        height: 44,
+        child: Transform.rotate(
+          angle: (tracking.heading ?? 0) * math.pi / 180,
+          child: const Icon(Icons.navigation,
+              color: Color(0xFF1A73E8), size: 36),
+        ),
       ));
     }
 
     if (order != null && target != null) {
       markers.add(Marker(
-        markerId: const MarkerId('destination'),
-        position: target.point,
-        icon: BitmapDescriptor.defaultMarkerWithHue(
-          target.isPickup
-              ? BitmapDescriptor.hueOrange
-              : BitmapDescriptor.hueRed,
+        point: target.point,
+        width: 48,
+        height: 48,
+        // Pin tip sits exactly on the destination.
+        alignment: Alignment.topCenter,
+        child: Icon(
+          Icons.location_pin,
+          color: target.isPickup ? Colors.orange : Colors.red,
+          size: 44,
         ),
-        infoWindow: InfoWindow(title: target.title, snippet: target.address),
       ));
     }
 
     return markers;
   }
 
-  Set<Polyline> _buildPolylines(DirectionsState directions) {
-    if (directions.routePoints.length < 2) return {};
-    // A soft white casing under the brand-green line reads as a proper
+  List<Polyline> _buildPolylines(DirectionsState directions) {
+    if (directions.routePoints.length < 2) return const [];
+    // A soft white casing around the brand-green line reads as a proper
     // navigation route rather than a plain single-color stroke.
-    return {
+    return [
       Polyline(
-        polylineId: const PolylineId('route_casing'),
         points: directions.routePoints,
-        color: Colors.white,
-        width: 8,
-        zIndex: 1,
-      ),
-      Polyline(
-        polylineId: const PolylineId('route'),
-        points: directions.routePoints,
+        strokeWidth: 5,
         color: AppColors.primary,
-        width: 5,
-        zIndex: 2,
+        borderStrokeWidth: 3,
+        borderColor: Colors.white,
       ),
-    };
+    ];
   }
 
   @override
@@ -317,23 +316,32 @@ class _LiveTrackingScreenState extends ConsumerState<LiveTrackingScreen> {
       ),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(
-              target: initialPosition,
-              zoom: 15,
+          // OpenStreetMap tiles: free, no API key (same as the vendor app).
+          FlutterMap(
+            mapController: _map,
+            options: MapOptions(
+              initialCenter: initialPosition,
+              initialZoom: 15,
+              onMapReady: () => _mapReady = true,
             ),
-            onMapCreated: (controller) {
-              if (!_mapCompleter.isCompleted) {
-                _mapCompleter.complete(controller);
-              }
-              _mapController = controller;
-            },
-            markers: _buildMarkers(tracking, order, target),
-            polylines: _buildPolylines(directions),
-            myLocationEnabled: true,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.aquagasrider',
+              ),
+              PolylineLayer(polylines: _buildPolylines(directions)),
+              MarkerLayer(markers: _buildMarkers(tracking, order, target)),
+            ],
+          ),
+
+          // Required OpenStreetMap credit, kept above the bottom panel.
+          Positioned(
+            left: 8,
+            bottom: order != null ? 292 : 8,
+            child: const Text(
+              '© OpenStreetMap contributors',
+              style: TextStyle(fontSize: 10, color: Colors.black54),
+            ),
           ),
 
           // Next-maneuver + ETA banner

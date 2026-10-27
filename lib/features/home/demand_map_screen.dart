@@ -2,7 +2,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/constants/app_colors.dart';
 import '../../data/models/growth_models.dart';
 import '../../data/providers/growth_provider.dart';
@@ -19,7 +20,9 @@ class DemandMapScreen extends ConsumerStatefulWidget {
 class _DemandMapScreenState extends ConsumerState<DemandMapScreen> {
   static const _nairobi = LatLng(-1.2921, 36.8219);
   LatLng _center = _nairobi;
-  GoogleMapController? _controller;
+  final MapController _map = MapController();
+  bool _mapReady = false;
+  bool _located = false;
 
   @override
   void initState() {
@@ -31,31 +34,50 @@ class _DemandMapScreenState extends ConsumerState<DemandMapScreen> {
     try {
       final p = await Geolocator.getLastKnownPosition();
       if (p != null && mounted) {
-        setState(() => _center = LatLng(p.latitude, p.longitude));
-        _controller?.animateCamera(CameraUpdate.newLatLng(_center));
+        setState(() {
+          _center = LatLng(p.latitude, p.longitude);
+          _located = true;
+        });
+        if (_mapReady) {
+          try {
+            _map.move(_center, _map.camera.zoom);
+          } catch (_) {
+            // Map not attached yet; the initial center already covers it.
+          }
+        }
       }
     } catch (_) {
       // Stay on the Nairobi default.
     }
   }
 
-  Set<Circle> _circles(List<DemandZone> zones) => {
-        for (final (i, z) in zones.indexed)
-          Circle(
-            circleId: CircleId('z$i'),
-            center: LatLng(z.latitude, z.longitude),
+  // Skip any zone with unusable coordinates/size so one bad row from the
+  // server can never take the whole screen down.
+  bool _valid(DemandZone z) =>
+      z.latitude.isFinite &&
+      z.longitude.isFinite &&
+      z.radiusM.isFinite &&
+      z.radiusM > 0 &&
+      z.latitude.abs() <= 90 &&
+      z.longitude.abs() <= 180;
+
+  List<CircleMarker> _circles(List<DemandZone> zones) => [
+        for (final z in zones.where(_valid))
+          CircleMarker(
+            point: LatLng(z.latitude, z.longitude),
             radius: z.radiusM,
-            fillColor: Color.lerp(const Color(0xFFFFC107),
+            useRadiusInMeter: true,
+            color: Color.lerp(const Color(0xFFFFC107),
                     const Color(0xFFE53935), z.intensity)!
                 .withOpacity(0.25 + 0.35 * z.intensity),
-            strokeColor: const Color(0xFFE53935).withOpacity(0.5),
-            strokeWidth: 1,
+            borderColor: const Color(0xFFE53935).withOpacity(0.5),
+            borderStrokeWidth: 1,
           ),
-      };
+      ];
 
   @override
   void dispose() {
-    _controller?.dispose();
+    _map.dispose();
     super.dispose();
   }
 
@@ -75,14 +97,40 @@ class _DemandMapScreenState extends ConsumerState<DemandMapScreen> {
       ),
       body: Stack(
         children: [
-          GoogleMap(
-            initialCameraPosition: CameraPosition(target: _center, zoom: 12),
-            onMapCreated: (c) => _controller = c,
-            circles: zones.maybeWhen(data: _circles, orElse: () => {}),
-            myLocationEnabled: true,
-            myLocationButtonEnabled: true,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
+          // OpenStreetMap tiles: free, no API key (same as the vendor app).
+          FlutterMap(
+            mapController: _map,
+            options: MapOptions(
+              initialCenter: _center,
+              initialZoom: 12,
+              onMapReady: () => _mapReady = true,
+            ),
+            children: [
+              TileLayer(
+                urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                userAgentPackageName: 'com.example.aquagasrider',
+              ),
+              CircleLayer(
+                  circles: zones.maybeWhen(data: _circles, orElse: () => const <CircleMarker>[])),
+              if (_located)
+                MarkerLayer(markers: [
+                  Marker(
+                    point: _center,
+                    width: 28,
+                    height: 28,
+                    child: const Icon(Icons.my_location,
+                        color: Color(0xFF1A73E8), size: 26),
+                  ),
+                ]),
+            ],
+          ),
+          const Positioned(
+            left: 8,
+            top: 8,
+            child: Text(
+              '© OpenStreetMap contributors',
+              style: TextStyle(fontSize: 10, color: Colors.black54),
+            ),
           ),
           Positioned(
             left: 16,

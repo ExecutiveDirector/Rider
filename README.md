@@ -65,19 +65,14 @@ flutterfire configure
 ```
 This generates `lib/firebase_options.dart`.
 
-### 4. Google Maps API key
+### 4. Maps and routing (no API key needed)
 
-**Android** — `android/app/src/main/AndroidManifest.xml`:
-```xml
-<meta-data
-  android:name="com.google.android.geo.API_KEY"
-  android:value="YOUR_GOOGLE_MAPS_KEY"/>
-```
-
-**iOS** — `ios/Runner/AppDelegate.swift`:
-```swift
-GMSServices.provideAPIKey("YOUR_GOOGLE_MAPS_KEY")
-```
+Maps use OpenStreetMap tiles via `flutter_map`, and routes / turn-by-turn use
+a free OSRM server — the same approach as the vendor app, with nothing to
+configure. The public servers are fine for launch; as traffic grows, point
+routing at your own OSRM / OpenRouteService with
+`--dart-define=ROUTING_BASE_URL=https://your-routing-host` and move tiles to a
+provider whose terms allow heavy use (or self-host).
 
 ### 5. Environment variables
 

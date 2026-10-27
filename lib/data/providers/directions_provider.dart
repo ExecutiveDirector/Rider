@@ -1,7 +1,7 @@
 // lib/data/providers/directions_provider.dart
 import 'dart:math' as math;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import '../../core/services/directions_service.dart';
 
 class DirectionsState {
@@ -54,8 +54,7 @@ class DirectionsState {
 }
 
 /// Re-fetches the route to the destination as the rider moves, but throttles
-/// calls so we're not hitting the Directions API on every GPS tick (that
-/// gets expensive fast on Google's per-request billing).
+/// calls so we're not hitting the routing service on every GPS tick.
 class DirectionsNotifier extends StateNotifier<DirectionsState> {
   DirectionsNotifier() : super(const DirectionsState());
 

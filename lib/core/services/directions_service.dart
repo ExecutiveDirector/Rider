@@ -1,9 +1,9 @@
 // lib/core/services/directions_service.dart
 import 'package:dio/dio.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import '../constants/api_constants.dart';
 
-/// One turn-by-turn instruction from the Directions API.
+/// One turn-by-turn instruction.
 class RouteStep {
   /// Plain-text instruction, e.g. "Turn left onto Mombasa Rd".
   final String instruction;
@@ -11,7 +11,8 @@ class RouteStep {
   /// Length of this step, e.g. "350 m".
   final String distanceText;
 
-  /// Google maneuver id ("turn-left", "roundabout-right", ...), if any.
+  /// Maneuver id ("turn-left", "roundabout-right", ...), if any. Uses the
+  /// same ids the navigation banner already maps to icons.
   final String? maneuver;
 
   /// Where this step ends — reaching it means the maneuver is done.
@@ -43,99 +44,166 @@ class DirectionsResult {
   });
 }
 
-/// Thin client around the Google Directions REST API.
-///
-/// NOTE: this calls Google directly from the device using
-/// [ApiConstants.directionsApiKey]. That's the fastest path to ship, but it
-/// does mean the key ships inside the APK. Restrict the key in Cloud
-/// Console (Directions API only + Android package/SHA-1 + iOS bundle ID).
-/// If you'd rather not expose a Maps key client-side at all, the safer
-/// long-term move is a tiny backend proxy endpoint that calls Directions
-/// server-side and forwards just the decoded result — happy to wire that
-/// up instead if you'd prefer.
+/// Client for a free OSRM routing server (OpenStreetMap data, no API key).
+/// Fails soft: any error returns null and the map simply shows no route.
 class DirectionsService {
   DirectionsService._();
   static final DirectionsService instance = DirectionsService._();
 
-  final Dio _dio = Dio();
-  static const _baseUrl =
-      'https://maps.googleapis.com/maps/api/directions/json';
+  final Dio _dio = Dio(BaseOptions(
+    connectTimeout: const Duration(seconds: 10),
+    receiveTimeout: const Duration(seconds: 15),
+    headers: {'User-Agent': 'AquaGasRider/1.0'},
+  ));
 
   Future<DirectionsResult?> getDirections({
     required LatLng origin,
     required LatLng destination,
   }) async {
-    if (ApiConstants.directionsApiKey.isEmpty) {
-      return null; // No key configured — caller falls back gracefully.
-    }
-
     try {
-      final response = await _dio.get(_baseUrl, queryParameters: {
-        'origin': '${origin.latitude},${origin.longitude}',
-        'destination': '${destination.latitude},${destination.longitude}',
-        'mode': 'driving',
-        'region': 'ke',
-        'key': ApiConstants.directionsApiKey,
-      });
+      // OSRM wants lon,lat order.
+      final coords = '${origin.longitude},${origin.latitude};'
+          '${destination.longitude},${destination.latitude}';
+      final response = await _dio.get(
+        '${ApiConstants.routingBaseUrl}/route/v1/driving/$coords',
+        queryParameters: {
+          'overview': 'full',
+          'geometries': 'polyline', // precision 5
+          'steps': 'true',
+        },
+      );
 
       final data = response.data as Map<String, dynamic>;
-      if (data['status'] != 'OK') return null;
-
+      if (data['code'] != 'Ok') return null;
       final routes = data['routes'] as List? ?? [];
       if (routes.isEmpty) return null;
 
       final route = routes.first as Map<String, dynamic>;
+      final distanceM = (route['distance'] as num).toDouble();
+      final durationS = (route['duration'] as num).toDouble();
       final legs = route['legs'] as List? ?? [];
-      if (legs.isEmpty) return null;
-      final leg = legs.first as Map<String, dynamic>;
+      final rawSteps = legs.isEmpty
+          ? const []
+          : ((legs.first as Map<String, dynamic>)['steps'] as List? ?? []);
 
-      final overviewPolyline = (route['overview_polyline']
-          as Map<String, dynamic>)['points'] as String;
-
+      // OSRM attaches each maneuver to the START of its step. The banner shows
+      // "what's coming, and how far", so every step carries the NEXT step's
+      // maneuver together with this step's length and end point.
       final steps = <RouteStep>[];
-      for (final raw in (leg['steps'] as List? ?? [])) {
-        final m = raw as Map<String, dynamic>;
-        final end = m['end_location'] as Map<String, dynamic>;
+      for (var i = 0; i < rawSteps.length; i++) {
+        final m = rawSteps[i] as Map<String, dynamic>;
+        final isLast = i + 1 >= rawSteps.length;
+        final upcoming = isLast ? m : rawSteps[i + 1] as Map<String, dynamic>;
+        final maneuver =
+            (upcoming['maneuver'] as Map<String, dynamic>?) ?? const {};
+        final type = maneuver['type'] as String? ?? '';
+        final modifier = maneuver['modifier'] as String?;
+
+        LatLng end = destination;
+        final loc = maneuver['location'] as List?;
+        if (!isLast && loc != null && loc.length >= 2) {
+          end = LatLng((loc[1] as num).toDouble(), (loc[0] as num).toDouble());
+        }
         steps.add(RouteStep(
-          instruction: _stripHtml(m['html_instructions'] as String? ?? ''),
-          distanceText:
-              (m['distance'] as Map<String, dynamic>?)?['text'] as String? ??
-                  '',
-          maneuver: m['maneuver'] as String?,
-          end: LatLng(
-            (end['lat'] as num).toDouble(),
-            (end['lng'] as num).toDouble(),
-          ),
+          instruction:
+              _instruction(type, modifier, upcoming['name'] as String? ?? ''),
+          distanceText: _distanceText((m['distance'] as num?)?.toDouble() ?? 0),
+          maneuver: _maneuverId(type, modifier),
+          end: end,
         ));
       }
 
       return DirectionsResult(
-        polylinePoints: _decodePolyline(overviewPolyline),
-        distanceText: leg['distance']['text'] as String,
-        durationText: leg['duration']['text'] as String,
-        distanceKm: (leg['distance']['value'] as num) / 1000.0,
-        durationMinutes: ((leg['duration']['value'] as num) / 60).round(),
+        polylinePoints: _decodePolyline(route['geometry'] as String),
+        distanceText: _distanceText(distanceM),
+        durationText: _durationText(durationS),
+        distanceKm: distanceM / 1000.0,
+        durationMinutes: (durationS / 60).round(),
         steps: steps,
       );
     } catch (_) {
-      // Network hiccup, quota error, malformed response, etc. — fail soft.
+      // Network hiccup, rate limit, malformed response, etc. — fail soft.
       return null;
     }
   }
 
-  /// Directions returns instructions as HTML ("Turn <b>left</b> onto ...",
-  /// optionally followed by a <div> with extra context). Reduce to plain text.
-  String _stripHtml(String html) {
-    return html
-        .replaceAll(RegExp(r'<div[^>]*>.*?</div>', dotAll: true), '')
-        .replaceAll(RegExp(r'<[^>]+>'), '')
-        .replaceAll('&nbsp;', ' ')
-        .replaceAll('&amp;', '&')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
+  String _distanceText(double meters) => meters >= 1000
+      ? '${(meters / 1000).toStringAsFixed(1)} km'
+      : '${meters.round()} m';
+
+  String _durationText(double seconds) {
+    final mins = (seconds / 60).round();
+    if (mins < 1) return '1 min';
+    if (mins < 60) return '$mins min${mins == 1 ? '' : 's'}';
+    final h = mins ~/ 60;
+    final m = mins % 60;
+    return m == 0 ? '$h hr' : '$h hr $m min';
   }
 
-  /// Standard Google encoded-polyline decoding algorithm.
+  /// OSRM type/modifier → the maneuver ids the banner knows about.
+  String? _maneuverId(String type, String? modifier) {
+    if (type == 'roundabout' || type == 'rotary' || type == 'roundabout turn') {
+      return modifier != null && modifier.contains('left')
+          ? 'roundabout-left'
+          : 'roundabout-right';
+    }
+    if (type == 'merge') return 'merge';
+    switch (modifier) {
+      case 'left':
+        return 'turn-left';
+      case 'right':
+        return 'turn-right';
+      case 'slight left':
+        return 'turn-slight-left';
+      case 'slight right':
+        return 'turn-slight-right';
+      case 'sharp left':
+        return 'turn-sharp-left';
+      case 'sharp right':
+        return 'turn-sharp-right';
+      case 'uturn':
+        return 'uturn-left';
+      default:
+        return null; // straight / unknown → straight arrow
+    }
+  }
+
+  String _instruction(String type, String? modifier, String name) {
+    final road = name.isEmpty ? '' : ' onto $name';
+    final dir = modifier == null
+        ? ''
+        : modifier == 'uturn'
+            ? 'U-turn'
+            : modifier;
+    switch (type) {
+      case 'depart':
+        return name.isEmpty ? 'Start your trip' : 'Head out on $name';
+      case 'arrive':
+        return 'Arrive at your destination';
+      case 'roundabout':
+      case 'rotary':
+      case 'roundabout turn':
+        return 'Enter the roundabout and continue$road';
+      case 'merge':
+        return 'Merge$road';
+      case 'fork':
+        return dir.isEmpty ? 'Keep to the fork$road' : 'Keep $dir at the fork$road';
+      case 'end of road':
+        return dir.isEmpty ? 'Turn$road' : 'Turn $dir$road';
+      case 'continue':
+      case 'new name':
+        return dir.isEmpty || dir == 'straight'
+            ? 'Continue${name.isEmpty ? '' : ' on $name'}'
+            : 'Continue $dir$road';
+      default:
+        if (dir.isEmpty || dir == 'straight') {
+          return 'Continue${name.isEmpty ? '' : ' on $name'}';
+        }
+        return dir == 'U-turn' ? 'Make a U-turn$road' : 'Turn $dir$road';
+    }
+  }
+
+  /// Standard encoded-polyline decoding (precision 5).
   List<LatLng> _decodePolyline(String encoded) {
     final List<LatLng> points = [];
     int index = 0, len = encoded.length;
