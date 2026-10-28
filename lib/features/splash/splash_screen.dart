@@ -21,19 +21,34 @@ class SplashScreen extends ConsumerStatefulWidget {
 }
 
 class _SplashScreenState extends ConsumerState<SplashScreen>
-    with SingleTickerProviderStateMixin {
-  late AnimationController _ctrl;
-  late Animation<double> _fadeAnim;
-  late Animation<double> _scaleAnim;
+    with TickerProviderStateMixin {
+  // One-shot entrance: logo pops in, then the text and loader stagger up.
+  late final AnimationController _intro;
+  // Gentle idle motion once everything is on screen.
+  late final AnimationController _idle;
+
+  late final Animation<double> _logoScale;
+  late final Animation<double> _logoFade;
+  late final Animation<double> _badge;
+  late final Animation<double> _tagline;
+  late final Animation<double> _loader;
+
+  Animation<double> _interval(double a, double b, [Curve c = Curves.easeOutCubic]) =>
+      CurvedAnimation(parent: _intro, curve: Interval(a, b, curve: c));
 
   @override
   void initState() {
     super.initState();
-    _ctrl = AnimationController(vsync: this, duration: const Duration(milliseconds: 900));
-    _fadeAnim = CurvedAnimation(parent: _ctrl, curve: Curves.easeIn);
-    _scaleAnim = Tween<double>(begin: 0.8, end: 1.0)
-        .animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutBack));
-    _ctrl.forward();
+    _intro = AnimationController(vsync: this, duration: const Duration(milliseconds: 1500));
+    _idle = AnimationController(vsync: this, duration: const Duration(milliseconds: 2600))
+      ..repeat(reverse: true);
+    _logoScale = Tween<double>(begin: 0.55, end: 1.0)
+        .animate(_interval(0.0, 0.5, Curves.easeOutBack));
+    _logoFade = _interval(0.0, 0.3, Curves.easeOut);
+    _badge = _interval(0.35, 0.65);
+    _tagline = _interval(0.5, 0.8);
+    _loader = _interval(0.7, 1.0);
+    _intro.forward();
     _checkAuth();
   }
 
@@ -88,9 +103,16 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
 
   @override
   void dispose() {
-    _ctrl.dispose();
+    _intro.dispose();
+    _idle.dispose();
     super.dispose();
   }
+
+  /// Fades a child in while sliding it up a little.
+  Widget _rise(Animation<double> t, Widget child) => Opacity(
+        opacity: t.value,
+        child: Transform.translate(offset: Offset(0, 16 * (1 - t.value)), child: child),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -112,50 +134,100 @@ class _SplashScreenState extends ConsumerState<SplashScreen>
               child: _GlowOrb(color: AppColors.primary, size: 260),
             ),
             Center(
-              child: FadeTransition(
-                opacity: _fadeAnim,
-                child: ScaleTransition(
-                  scale: _scaleAnim,
-                  child: Column(
+              child: AnimatedBuilder(
+                animation: Listenable.merge([_intro, _idle]),
+                builder: (context, _) {
+                  final float = Curves.easeInOut.transform(_idle.value) * 6 - 3;
+                  return Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const AppLogoMark(size: 96),
-                      const SizedBox(height: 24),
-                      const Text(
-                        'AquaGas Rider',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
+                      // Logo card with a soft pulsing halo.
+                      Opacity(
+                        opacity: _logoFade.value,
+                        child: Transform.translate(
+                          offset: Offset(0, float),
+                          child: Transform.scale(
+                            scale: _logoScale.value,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 22),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(28),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.accentMint
+                                        .withOpacity(0.25 + 0.2 * _idle.value),
+                                    blurRadius: 30 + 18 * _idle.value,
+                                    spreadRadius: 2 + 4 * _idle.value,
+                                  ),
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.18),
+                                    blurRadius: 18,
+                                    offset: const Offset(0, 8),
+                                  ),
+                                ],
+                              ),
+                              child: Image.asset(
+                                'assets/images/logo.png',
+                                width: 200,
+                                fit: BoxFit.contain,
+                                errorBuilder: (_, __, ___) => const AppLogoMark(size: 72),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Delivering gas & water across Kenya',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.75),
-                          fontSize: 14,
-                          fontWeight: FontWeight.w400,
+                      const SizedBox(height: 26),
+                      _rise(
+                        _badge,
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.16),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(color: Colors.white.withOpacity(0.35)),
+                          ),
+                          child: const Text(
+                            'RIDER',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 4,
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(height: 40),
-                      FadeTransition(
-                        opacity: _fadeAnim,
+                      const SizedBox(height: 14),
+                      _rise(
+                        _tagline,
+                        Text(
+                          'Delivering gas & water across Kenya',
+                          style: TextStyle(
+                            color: Colors.white.withOpacity(0.8),
+                            fontSize: 14,
+                            letterSpacing: 0.3,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 44),
+                      Opacity(
+                        opacity: _loader.value,
                         child: SizedBox(
-                          width: 28,
-                          height: 28,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.4,
-                            valueColor: AlwaysStoppedAnimation(
-                              Colors.white.withOpacity(0.85),
+                          width: 120,
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              minHeight: 4,
+                              backgroundColor: Colors.white.withOpacity(0.2),
+                              valueColor: const AlwaysStoppedAnimation(Colors.white),
                             ),
                           ),
                         ),
                       ),
                     ],
-                  ),
-                ),
+                  );
+                },
               ),
             ),
           ],
